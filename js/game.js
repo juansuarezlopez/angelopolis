@@ -9,6 +9,9 @@
   // El lienzo lógico mide 960x540, pero el búfer se dibuja a la densidad real
   // de la pantalla para que el detalle vectorial no se pierda al estirarlo.
   let pixelScale = 1;
+  // Levanta el suelo sobre el borde inferior para que el piso no quede
+  // pegado a la pantalla y se vea un marco de adoquín abajo.
+  const VIEW_LIFT = 34;
 
   function fitBuffer() {
     let shown = 1;
@@ -24,8 +27,14 @@
     canvas.height = Math.round(H * pixelScale);
   }
 
-  // Vuelve al sistema de coordenadas lógico, con el temblor de cámara aplicado.
+  // Vuelve al sistema de coordenadas lógico, con el temblor de cámara y el
+  // levantamiento del suelo aplicados (lo usan el mundo y el fondo).
   function baseTransform(sx, sy) {
+    ctx.setTransform(pixelScale, 0, 0, pixelScale, (sx || 0) * pixelScale, ((sy || 0) - VIEW_LIFT) * pixelScale);
+  }
+
+  // Coordenadas de pantalla puras, sin levantar: viñeta y HUD del jefe.
+  function screenTransform(sx, sy) {
     ctx.setTransform(pixelScale, 0, 0, pixelScale, (sx || 0) * pixelScale, (sy || 0) * pixelScale);
   }
 
@@ -124,24 +133,24 @@
 
   function makeLevel() {
     const platforms = [
-      { x: 0, y: 500, w: 640, h: 50, kind: "street" },
-      { x: 780, y: 500, w: 420, h: 50, kind: "street" },
+      { x: 0, y: 500, w: 640, h: 74, kind: "street" },
+      { x: 780, y: 500, w: 420, h: 74, kind: "street" },
       { x: 700, y: 410, w: 90, h: 22, kind: "balcony" },
-      { x: 1260, y: 500, w: 280, h: 50, kind: "street" },
+      { x: 1260, y: 500, w: 280, h: 74, kind: "street" },
       { x: 1188, y: 360, w: 86, h: 20, kind: "roof" },
       { x: 1580, y: 430, w: 140, h: 22, kind: "balcony" },
       { x: 1760, y: 340, w: 130, h: 22, kind: "roof" },
       { x: 1940, y: 250, w: 220, h: 24, kind: "roof" },
-      { x: 1940, y: 500, w: 520, h: 50, kind: "street" },
+      { x: 1940, y: 500, w: 520, h: 74, kind: "street" },
       { x: 2280, y: 400, w: 130, h: 20, kind: "balcony" },
       { x: 2430, y: 440, w: 80, h: 16, kind: "balcony" },
-      { x: 2520, y: 500, w: 120, h: 50, kind: "street" },
+      { x: 2520, y: 500, w: 120, h: 74, kind: "street" },
       { x: 2660, y: 430, w: 110, h: 20, kind: "balcony" },
       { x: 2800, y: 350, w: 110, h: 20, kind: "roof" },
       { x: 2960, y: 270, w: 160, h: 22, kind: "roof" },
-      { x: 3180, y: 500, w: 260, h: 50, kind: "street" },
+      { x: 3180, y: 500, w: 260, h: 74, kind: "street" },
       { x: 3480, y: 430, w: 120, h: 22, kind: "balcony" },
-      { x: 3640, y: 500, w: 860, h: 50, kind: "atrium" },
+      { x: 3640, y: 500, w: 860, h: 74, kind: "atrium" },
       { x: 4460, y: 80, w: 40, h: 420, kind: "wall" },
     ];
 
@@ -1132,7 +1141,7 @@
     sky.addColorStop(0.75, lerpColor("#3d2b3a", "#54181a", hell));
     sky.addColorStop(1, lerpColor("#6b4a44", "#7a2a22", hell));
     ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillRect(0, VIEW_LIFT, W, H);
 
     ctx.fillStyle = "rgba(255,255,255,0.6)";
     for (let i = 0; i < 46; i++) {
@@ -1333,173 +1342,183 @@
   }
 
   // Catedral barroca al final de la calle: torres, rosetón y cruces de piedra.
-  function drawCathedral(x, hell) {
+﻿  function drawCathedral(x, hell) {
     if (x < -700 || x > W + 400) return;
     const baseY = 500;
-    const tint = hell * 0.42;
-    const stone = ctx.createLinearGradient(x, 60, x + 200, baseY);
-    stone.addColorStop(0, lerpColor("#6c637b", "#5e2f2c", tint));
-    stone.addColorStop(0.4, lerpColor("#453e53", "#421d1f", tint));
-    stone.addColorStop(1, lerpColor("#241f30", "#251016", tint));
-    ctx.fillStyle = stone;
-
-    ctx.fillRect(x + 60, 150, 300, baseY - 150);
-    ctx.fillRect(x - 10, 92, 74, baseY - 92);
-    ctx.fillRect(x + 356, 92, 74, baseY - 92);
-
-    // Hiladas de cantera y contrafuertes.
-    ctx.strokeStyle = "rgba(0,0,0,0.16)";
-    ctx.lineWidth = 1;
-    for (let sy = 160; sy < baseY; sy += 20) {
-      ctx.beginPath();
-      ctx.moveTo(x + 60, sy);
-      ctx.lineTo(x + 360, sy);
-      ctx.stroke();
-    }
-    for (let sy = 104; sy < baseY; sy += 20) {
-      ctx.beginPath();
-      ctx.moveTo(x - 10, sy);
-      ctx.lineTo(x + 64, sy);
-      ctx.moveTo(x + 356, sy);
-      ctx.lineTo(x + 430, sy);
-      ctx.stroke();
-    }
-    ctx.fillStyle = "rgba(255,250,235,0.07)";
-    ctx.fillRect(x + 78, 160, 12, baseY - 160);
-    ctx.fillRect(x + 330, 160, 12, baseY - 160);
-    ctx.fillStyle = "rgba(0,0,0,0.2)";
-    ctx.fillRect(x + 168, 150, 8, baseY - 150);
-    ctx.fillRect(x + 244, 150, 8, baseY - 150);
-
-    // Nichos con santos de piedra.
-    for (const nx of [x + 120, x + 292]) {
-      ctx.fillStyle = "rgba(0,0,0,0.42)";
-      ctx.beginPath();
-      ctx.moveTo(nx - 15, 396);
-      ctx.lineTo(nx - 15, 330);
-      ctx.quadraticCurveTo(nx, 306, nx + 15, 330);
-      ctx.lineTo(nx + 15, 396);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = lerpColor("#8d8496", "#7b4a42", tint);
-      roundRect(nx - 7, 340, 14, 56, 6);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(nx, 336, 6, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Campanarios y cruces.
-    for (const tx of [x + 27, x + 393]) {
-      ctx.beginPath();
-      ctx.moveTo(tx - 44, 92);
-      ctx.lineTo(tx, 34);
-      ctx.lineTo(tx + 44, 92);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = lerpColor("#d8c88f", "#e0a262", hell);
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(tx, 12);
-      ctx.lineTo(tx, 36);
-      ctx.moveTo(tx - 8, 21);
-      ctx.lineTo(tx + 8, 21);
-      ctx.stroke();
-      ctx.fillStyle = lerpColor("#171327", "#150607", hell);
-      ctx.beginPath();
-      ctx.moveTo(tx - 16, 92);
-      ctx.lineTo(tx - 16, 66);
-      ctx.quadraticCurveTo(tx, 44, tx + 16, 66);
-      ctx.lineTo(tx + 16, 92);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = stone;
-    }
-
-    // Frontón.
-    ctx.beginPath();
-    ctx.moveTo(x + 50, 150);
-    ctx.lineTo(x + 210, 100);
-    ctx.lineTo(x + 370, 150);
-    ctx.closePath();
-    ctx.fill();
-
-    // Rosetón de vitral: pétalos de vidrio azul, ámbar y púrpura.
+    const t = hell * 0.42;
     const cx = x + 210;
-    const cy = 232;
-    const glow = 0.62 + Math.sin(time * 1.7) * 0.1;
-    const bloom = ctx.createRadialGradient(cx, cy, 6, cx, cy, 74);
-    bloom.addColorStop(0, `rgba(255,240,200,${0.3 * glow})`);
-    bloom.addColorStop(1, "rgba(255,220,160,0)");
-    ctx.fillStyle = bloom;
-    ctx.fillRect(cx - 80, cy - 80, 160, 160);
-    ctx.fillStyle = "rgba(18,14,24,0.92)";
-    ctx.beginPath();
-    ctx.arc(cx, cy, 48, 0, Math.PI * 2);
-    ctx.fill();
-    const glass = ["#3b6bab", "#c08a3f", "#2f5f92", "#8a6bb0"];
-    for (let i = 0; i < 12; i++) {
-      const a0 = (i / 12) * Math.PI * 2;
-      const a1 = ((i + 1) / 12) * Math.PI * 2;
-      ctx.fillStyle = lerpColor(glass[i % 4], "#c2502f", hell * 0.5);
-      ctx.globalAlpha = 0.62 + 0.14 * Math.abs(Math.sin(time * 1.1 + i));
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, 44, a0 + 0.03, a1 - 0.03);
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = `rgba(255,248,222,${glow})`;
-    ctx.beginPath();
-    ctx.arc(cx, cy, 12, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = lerpColor("#7d7290", "#5c2321", tint);
-    ctx.lineWidth = 3;
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2;
-      ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(a) * 11, cy + Math.sin(a) * 11);
-      ctx.lineTo(cx + Math.cos(a) * 46, cy + Math.sin(a) * 46);
-      ctx.stroke();
-    }
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(cx, cy, 48, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(cx, cy, 26, 0, Math.PI * 2);
-    ctx.stroke();
+    const wall = lerpColor("#f4f0e6", "#7c4a44", t);
+    const wallSh = lerpColor("#ddd6c6", "#5e3534", t);
+    const wallDk = lerpColor("#c4bcaa", "#4a2622", t);
+    const tile = lerpColor("#b23a2a", "#5a1612", t);
+    const tileSh = lerpColor("#8a2820", "#3a0e0c", t);
+    const tileHi = lerpColor("#d05a3e", "#7a2418", t);
+    const wain = lerpColor("#9a5a3c", "#5a2418", t);
+    const wainSh = lerpColor("#6e3e26", "#3a160e", t);
+    const trim = lerpColor("#c44a3a", "#6a1e16", t);
 
-    // Portón principal con arco de medio punto y luz de velas dentro.
-    const spill = ctx.createRadialGradient(x + 210, baseY - 40, 8, x + 210, baseY - 40, 150);
+    ctx.fillStyle = "rgba(10,8,14,0.28)";
+    ctx.beginPath();
+    ctx.ellipse(cx, baseY + 4, 230, 16, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const pw = 420, px0 = cx - pw / 2;
+    ctx.fillStyle = lerpColor("#8a8276", "#5a3a30", t);
+    roundRect(px0, baseY - 14, pw, 18, 4); ctx.fill();
+    ctx.fillStyle = lerpColor("#6e665a", "#3e2620", t);
+    ctx.fillRect(px0, baseY - 14, pw, 4);
+    for (let i = 0; i < 3; i++) {
+      ctx.fillStyle = lerpColor("#9a9286", "#6a4636", t);
+      ctx.fillRect(px0 + 18 + i * 8, baseY - 4 + i * 5, pw - 36 - i * 16, 5);
+      ctx.fillStyle = lerpColor("#7a7266", "#4a2e24", t);
+      ctx.fillRect(px0 + 18 + i * 8, baseY - 4 + i * 5, pw - 36 - i * 16, 2);
+    }
+    ctx.strokeStyle = lerpColor("#1a1612", "#0a0604", t);
+    ctx.lineWidth = 2.4;
+    for (const bx of [px0 + 6, px0 + pw - 6]) {
+      ctx.beginPath(); ctx.moveTo(bx, baseY - 14); ctx.lineTo(bx, baseY - 30); ctx.stroke();
+      for (let by = baseY - 28; by < baseY - 14; by += 7) {
+        ctx.beginPath(); ctx.moveTo(bx - 4, by); ctx.lineTo(bx + 4, by); ctx.stroke();
+      }
+    }
+
+    const bL = x + 30, bR = x + 390, bT = 300, bW = bR - bL;
+    const wg = ctx.createLinearGradient(bL, 0, bR, 0);
+    wg.addColorStop(0, wallSh); wg.addColorStop(0.18, wall);
+    wg.addColorStop(0.7, wall); wg.addColorStop(1, wallDk);
+    ctx.fillStyle = wg; ctx.fillRect(bL, bT, bW, baseY - bT);
+    const wT = baseY - (baseY - bT) * 0.34;
+    const wng = ctx.createLinearGradient(0, wT, 0, baseY);
+    wng.addColorStop(0, wain); wng.addColorStop(1, wainSh);
+    ctx.fillStyle = wng; ctx.fillRect(bL, wT, bW, baseY - wT);
+    ctx.strokeStyle = `rgba(0,0,0,${0.18 + t * 0.2})`; ctx.lineWidth = 1;
+    for (let sy = wT + 8; sy < baseY; sy += 10) { ctx.beginPath(); ctx.moveTo(bL, sy); ctx.lineTo(bR, sy); ctx.stroke(); }
+    for (let sx = bL + 14; sx < bR; sx += 22) { ctx.beginPath(); ctx.moveTo(sx, wT); ctx.lineTo(sx, baseY); ctx.stroke(); }
+    ctx.fillStyle = trim; ctx.fillRect(bL - 4, bT - 6, bW + 8, 7);
+    ctx.fillStyle = lerpColor("#9a3a2e", "#4a1410", t); ctx.fillRect(bL - 4, bT, bW + 8, 2);
+
+    ctx.fillStyle = wall;
+    ctx.beginPath(); ctx.moveTo(bL - 6, bT + 4); ctx.lineTo(cx, bT - 40); ctx.lineTo(bR + 6, bT + 4); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = wallSh;
+    ctx.beginPath(); ctx.moveTo(cx, bT - 40); ctx.lineTo(bR + 6, bT + 4); ctx.lineTo(cx, bT + 4); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = tile;
+    ctx.beginPath(); ctx.moveTo(bL - 10, bT - 2); ctx.lineTo(cx, bT - 44); ctx.lineTo(bR + 10, bT - 2); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = tileSh;
+    ctx.beginPath(); ctx.moveTo(cx, bT - 44); ctx.lineTo(bR + 10, bT - 2); ctx.lineTo(cx, bT - 2); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = `rgba(60,12,8,${0.4 + t * 0.3})`; ctx.lineWidth = 0.8;
+    for (let r = 0; r < 4; r++) {
+      const yy = bT - 6 - r * 9;
+      ctx.beginPath(); ctx.moveTo(bL - 8 + r * 3, yy); ctx.lineTo(cx, yy - 8 - r * 4); ctx.lineTo(bR + 8 - r * 3, yy); ctx.stroke();
+    }
+
+    for (const sxp of [bL + 16, bR - 16]) {
+      ctx.fillStyle = wg; ctx.fillRect(sxp - 7, bT - 6, 14, 40);
+      ctx.fillStyle = wallSh; ctx.fillRect(sxp + 2, bT - 6, 5, 40);
+      ctx.fillStyle = tile;
+      ctx.beginPath(); ctx.moveTo(sxp - 11, bT - 6); ctx.lineTo(sxp, bT - 30); ctx.lineTo(sxp + 11, bT - 6); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = tileSh;
+      ctx.beginPath(); ctx.moveTo(sxp, bT - 30); ctx.lineTo(sxp + 11, bT - 6); ctx.lineTo(sxp + 3, bT - 6); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = lerpColor("#d8c88f", "#9a6238", t);
+      ctx.beginPath(); ctx.arc(sxp, bT - 32, 2.4, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = lerpColor("#d8c88f", "#9a6238", t); ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(sxp, bT - 34); ctx.lineTo(sxp, bT - 40); ctx.stroke();
+    }
+
+    const tL = x + 150, tR = x + 270, tW = tR - tL, tT = 150;
+    const tg = ctx.createLinearGradient(tL, 0, tR, 0);
+    tg.addColorStop(0, wallSh); tg.addColorStop(0.2, wall); tg.addColorStop(0.75, wall); tg.addColorStop(1, wallDk);
+    ctx.fillStyle = tg; ctx.fillRect(tL, tT, tW, bT - tT + 6);
+    ctx.fillStyle = wng; ctx.fillRect(tL, bT - 34, tW, 40);
+    ctx.strokeStyle = `rgba(0,0,0,${0.18 + t * 0.2})`;
+    for (let sy = bT - 26; sy < bT + 6; sy += 10) { ctx.beginPath(); ctx.moveTo(tL, sy); ctx.lineTo(tR, sy); ctx.stroke(); }
+    ctx.fillStyle = lerpColor("#e8e2d4", "#6a3e38", t); ctx.fillRect(tL - 5, tT - 5, tW + 10, 6);
+    ctx.fillStyle = lerpColor("#bcb4a4", "#52302a", t); ctx.fillRect(tL - 5, tT, tW + 10, 2);
+    ctx.fillStyle = lerpColor("#e8e2d4", "#6a3e38", t); ctx.fillRect(tL - 5, bT - 10, tW + 10, 6);
+
+    const ckY = tT + 38;
+    ctx.fillStyle = lerpColor("#fbf7ee", "#5a3a36", t);
+    ctx.beginPath(); ctx.arc(cx, ckY, 17, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = lerpColor("#2a1c16", "#160606", t); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx, ckY, 17, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = 1.6;
+    for (const h of [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2]) {
+      ctx.beginPath(); ctx.moveTo(cx + Math.cos(h) * 11, ckY + Math.sin(h) * 11);
+      ctx.lineTo(cx + Math.cos(h) * 14, ckY + Math.sin(h) * 14); ctx.stroke();
+    }
+    ctx.strokeStyle = lerpColor("#1a120c", "#0a0404", t); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(cx, ckY); ctx.lineTo(cx - 6, ckY - 4); ctx.stroke();
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(cx, ckY); ctx.lineTo(cx + Math.cos(time * 0.5) * 10, ckY + Math.sin(time * 0.5) * 10); ctx.stroke();
+    ctx.fillStyle = lerpColor("#b23a2a", "#5a1612", t);
+    ctx.beginPath(); ctx.arc(cx, ckY, 1.6, 0, Math.PI * 2); ctx.fill();
+
+    const bfY = tT + 78;
+    for (const bx of [cx - 26, cx + 26]) {
+      ctx.fillStyle = lerpColor("#1a1410", "#0a0404", t);
+      ctx.beginPath(); ctx.moveTo(bx - 12, bfY + 26); ctx.lineTo(bx - 12, bfY);
+      ctx.quadraticCurveTo(bx, bfY - 12, bx + 12, bfY); ctx.lineTo(bx + 12, bfY + 26); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = lerpColor("#d8b04a", "#8a4a1e", t);
+      ctx.beginPath(); ctx.moveTo(bx - 5, bfY + 4); ctx.quadraticCurveTo(bx, bfY - 2, bx + 5, bfY + 4);
+      ctx.lineTo(bx + 5, bfY + 12); ctx.lineTo(bx - 5, bfY + 12); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = lerpColor("#9a7220", "#5a2e10", t); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(bx, bfY - 2); ctx.lineTo(bx, bfY - 8); ctx.stroke();
+    }
+
+    const rB = tT - 4, rA = rB - 78;
+    ctx.fillStyle = tile;
+    ctx.beginPath(); ctx.moveTo(tL - 10, rB); ctx.lineTo(cx, rA); ctx.lineTo(tR + 10, rB); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = tileSh;
+    ctx.beginPath(); ctx.moveTo(cx, rA); ctx.lineTo(tR + 10, rB); ctx.lineTo(cx, rB); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = tileHi;
+    ctx.beginPath(); ctx.moveTo(tL - 10, rB); ctx.lineTo(cx, rA); ctx.lineTo(cx, rB); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = `rgba(60,12,8,${0.4 + t * 0.3})`; ctx.lineWidth = 0.8;
+    for (let r = 0; r < 5; r++) {
+      const yy = rB - 6 - r * 14;
+      ctx.beginPath(); ctx.moveTo(tL - 8 + r * 4, yy); ctx.lineTo(cx, yy - 12 - r * 5); ctx.lineTo(tR + 8 - r * 4, yy); ctx.stroke();
+    }
+    ctx.strokeStyle = lerpColor("#d8c88f", "#9a6238", t); ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(cx, rA - 8); ctx.lineTo(cx, rA - 34);
+    ctx.moveTo(cx - 7, rA - 22); ctx.lineTo(cx + 7, rA - 22); ctx.stroke();
+
+    const dL = cx - 26, dR = cx + 26, dT = baseY - 96;
+    const spill = ctx.createRadialGradient(cx, baseY - 40, 8, cx, baseY - 40, 150);
     spill.addColorStop(0, `rgba(255,208,138,${0.22 - hell * 0.1})`);
     spill.addColorStop(1, "rgba(255,190,110,0)");
-    ctx.fillStyle = spill;
-    ctx.fillRect(x + 60, baseY - 190, 300, 190);
-    const door = ctx.createLinearGradient(x + 170, 330, x + 250, baseY);
-    door.addColorStop(0, lerpColor("#4a3524", "#40120f", hell));
-    door.addColorStop(1, lerpColor("#1d150f", "#1c0607", hell));
-    ctx.fillStyle = door;
-    ctx.beginPath();
-    ctx.moveTo(x + 168, baseY);
-    ctx.lineTo(x + 168, 356);
-    ctx.quadraticCurveTo(x + 210, 300, x + 252, 356);
-    ctx.lineTo(x + 252, baseY);
-    ctx.closePath();
-    ctx.fill();
+    ctx.fillStyle = spill; ctx.fillRect(dL - 20, dT - 30, 92, 130);
+    const dg = ctx.createLinearGradient(dL, dT, dR, baseY);
+    dg.addColorStop(0, lerpColor("#4a3524", "#40120f", hell));
+    dg.addColorStop(1, lerpColor("#1d150f", "#1c0607", hell));
+    ctx.fillStyle = dg;
+    ctx.beginPath(); ctx.moveTo(dL, baseY); ctx.lineTo(dL, dT + 18);
+    ctx.quadraticCurveTo(cx, dT - 8, dR, dT + 18); ctx.lineTo(dR, baseY); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = `rgba(0,0,0,${0.4 + t * 0.2})`; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(cx, dT + 4); ctx.lineTo(cx, baseY); ctx.stroke();
+    for (const lx of [dL + 8, dL + 18, dR - 8, dR - 18]) {
+      ctx.beginPath(); ctx.moveTo(lx, dT + 20); ctx.lineTo(lx, baseY - 2); ctx.stroke();
+    }
+    ctx.fillStyle = lerpColor("#3a2c20", "#1a0c08", t);
+    roundRect(cx - 3, baseY - 44, 6, 8, 2); ctx.fill();
 
     if (hell > 0.15) {
       ctx.fillStyle = `rgba(220,60,40,${0.1 + hell * 0.2 + Math.sin(time * 4) * 0.04})`;
-      ctx.beginPath();
-      ctx.moveTo(x + 168, baseY);
-      ctx.lineTo(x + 168, 356);
-      ctx.quadraticCurveTo(x + 210, 300, x + 252, 356);
-      ctx.lineTo(x + 252, baseY);
-      ctx.closePath();
-      ctx.fill();
+      ctx.beginPath(); ctx.moveTo(dL, baseY); ctx.lineTo(dL, dT + 18);
+      ctx.quadraticCurveTo(cx, dT - 8, dR, dT + 18); ctx.lineTo(dR, baseY); ctx.closePath(); ctx.fill();
     }
+
+    const nL = bL + 56, nR = nL + 30, nT = baseY - 74;
+    ctx.fillStyle = lerpColor("#1a1410", "#0a0404", t);
+    ctx.beginPath(); ctx.moveTo(nL, baseY); ctx.lineTo(nL, nT + 14);
+    ctx.quadraticCurveTo(nL + 15, nT - 6, nR, nT + 14); ctx.lineTo(nR, baseY); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = lerpColor("#e8e2d4", "#6a3e38", t);
+    ctx.beginPath(); ctx.ellipse(nL + 15, nT + 30, 6, 11, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = lerpColor("#f4f0e6", "#7c4a44", t);
+    ctx.beginPath(); ctx.arc(nL + 15, nT + 18, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = lerpColor("#bcb4a4", "#52302a", t); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(nL + 15, nT + 22); ctx.lineTo(nL + 15, nT + 34); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(nL + 9, nT + 40); ctx.lineTo(nL + 21, nT + 40); ctx.stroke();
+    // Alas de angel.
+    ctx.fillStyle = lerpColor("#f4f0e6", "#7c4a44", t);
+    ctx.beginPath(); ctx.moveTo(nL + 6, nT + 26); ctx.quadraticCurveTo(nL + 15, nT + 20, nL + 24, nT + 26); ctx.closePath(); ctx.fill();
   }
 
   function drawStreetHaze(hell) {
@@ -1507,7 +1526,7 @@
     g.addColorStop(0, "rgba(0,0,0,0)");
     g.addColorStop(1, `rgba(${Math.round(40 + hell * 30)},${Math.round(32 - hell * 14)},${Math.round(48 - hell * 32)},0.52)`);
     ctx.fillStyle = g;
-    ctx.fillRect(0, 380, W, H - 380);
+    ctx.fillRect(0, 380, W, H - 380 + VIEW_LIFT);
   }
 
   function lerpColor(a, b, t) {
@@ -2709,117 +2728,128 @@
     ctx.translate(0.6, SH_Y - 6.5);
     ctx.rotate(rig.head);
     ctx.scale(0.93, 0.93);
-    // Cuello.
+    const sway = rig.hair;
+
+    // Cuello con sombra.
     ctx.fillStyle = SKIN_DK;
-    roundRect(-2.6, 2, 5.6, 5, 2);
-    ctx.fill();
-    // Cráneo y rostro.
-    ctx.fillStyle = SKIN;
+    roundRect(-2.6, 2, 5.6, 5, 2); ctx.fill();
+    ctx.fillStyle = "rgba(150,96,70,0.3)";
+    ctx.fillRect(-2.6, 5, 5.6, 2);
+
+    // Cráneo: piel con degradado suave (luz de la luna desde la derecha).
+    const skin = ctx.createLinearGradient(-6, -10, 7, 4);
+    skin.addColorStop(0, lerpColor("#dcb094", SHADOW, 0.12));
+    skin.addColorStop(0.5, SKIN);
+    skin.addColorStop(1, "#f0c9a6");
+    ctx.fillStyle = skin;
     ctx.beginPath();
     ctx.ellipse(0.4, -3.4, 8, 9.4, 0.06, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "rgba(186,124,92,0.3)";
+    // Mejilla y mandíbula en sombra.
+    ctx.fillStyle = "rgba(170,108,80,0.22)";
     ctx.beginPath();
-    ctx.ellipse(-3, -2.8, 5.2, 8.6, 0.06, 0, Math.PI * 2);
-    ctx.fill();
-    // Pelo trasero (nuca), detrás de la oreja.
+    ctx.ellipse(-3.2, -2.4, 5.4, 8.4, 0.06, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(150,92,68,0.28)";
+    ctx.beginPath();
+    ctx.ellipse(-2, 3.6, 4.6, 3, 0, 0, Math.PI * 2); ctx.fill();
+    // Pómuloy luz de mejilla.
+    ctx.fillStyle = "rgba(255,236,214,0.5)";
+    ctx.beginPath();
+    ctx.ellipse(4.6, -2.4, 2.6, 2, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Pelo trasero (nuca).
     ctx.fillStyle = lerpColor(HAIR, SHADOW, 0.25);
     ctx.beginPath();
     ctx.moveTo(-7.4, -6);
     ctx.quadraticCurveTo(-9.4, 1.4, -5.4, 3.4);
     ctx.quadraticCurveTo(-3.4, 0.4, -3.8, -5);
-    ctx.closePath();
-    ctx.fill();
-    // Oreja.
+    ctx.closePath(); ctx.fill();
+
+    // Oreja con helix.
     ctx.fillStyle = SKIN_DK;
-    ctx.beginPath();
-    ctx.ellipse(-4, -3.4, 1.7, 2.3, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(150,96,70,0.6)";
-    ctx.lineWidth = 0.4;
-    ctx.beginPath();
-    ctx.arc(-4, -3.4, 0.9, -1, 1.8);
-    ctx.stroke();
-    // Nariz, boca y rubor.
-    ctx.strokeStyle = "rgba(176,116,86,0.65)";
-    ctx.lineWidth = 0.7;
-    ctx.beginPath();
-    ctx.moveTo(6.6, -3.8);
-    ctx.quadraticCurveTo(7.8, -2.5, 6.2, -1.9);
-    ctx.stroke();
-    ctx.strokeStyle = "rgba(126,70,48,0.85)";
-    ctx.beginPath();
-    ctx.arc(4.2, -0.4, 1.9, 0.2, 1.15);
-    ctx.stroke();
-    ctx.fillStyle = "rgba(214,124,104,0.18)";
-    ctx.beginPath();
-    ctx.ellipse(3.6, -2.2, 2.4, 1.4, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Ojo y ceja.
-    ctx.fillStyle = "#2b1a16";
-    ctx.beginPath();
-    ctx.ellipse(4.4, -4.8, 1.1, 1.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "rgba(255,255,255,0.85)";
-    ctx.fillRect(4.7, -5.4, 0.7, 0.7);
-    ctx.strokeStyle = "#5e3520";
-    ctx.lineWidth = 0.9;
-    ctx.beginPath();
-    ctx.moveTo(2.6, -8);
-    ctx.lineTo(6.1, -8.2);
-    ctx.stroke();
-    // Lentes: cristal tenue, montura oscura y varilla hasta la oreja.
-    ctx.fillStyle = "rgba(190,224,255,0.08)";
-    roundRect(1.9, -7, 5.6, 4.4, 1.5);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(58,68,80,0.9)";
-    ctx.lineWidth = 0.7;
-    roundRect(1.9, -7, 5.6, 4.4, 1.5);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(1.9, -5.9);
-    ctx.lineTo(-2.4, -6.2);
-    ctx.stroke();
-    ctx.strokeStyle = "rgba(255,255,255,0.6)";
-    ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    ctx.moveTo(3, -6.3);
-    ctx.lineTo(4.8, -6.5);
-    ctx.stroke();
-    // Pelo: masa superior, flequillo y mechones con retardo.
-    const sway = rig.hair;
+    ctx.beginPath(); ctx.ellipse(-4, -3.4, 1.7, 2.3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(150,96,70,0.7)"; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.arc(-4, -3.4, 0.9, -1, 1.8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-4.6, -3.8); ctx.quadraticCurveTo(-4, -2.6, -3.4, -2.6); ctx.stroke();
+
+    // Nariz: puente, lóbulo y fosa.
+    ctx.strokeStyle = "rgba(150,92,70,0.7)"; ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.moveTo(5.2, -5.2); ctx.quadraticCurveTo(7, -4, 7.2, -2.6); ctx.stroke();
+    ctx.fillStyle = "rgba(150,92,70,0.3)";
+    ctx.beginPath(); ctx.ellipse(7.4, -2.2, 1.1, 0.9, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(120,70,52,0.5)";
+    ctx.beginPath(); ctx.arc(7.6, -2.2, 0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(255,236,220,0.6)";
+    ctx.beginPath(); ctx.ellipse(7, -3.4, 0.7, 0.5, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Boca: sonrisa cerrada con labio.
+    ctx.strokeStyle = "rgba(132,76,54,0.85)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(3.4, -0.6); ctx.quadraticCurveTo(5, 0.4, 6.6, -0.4); ctx.stroke();
+    ctx.fillStyle = "rgba(196,108,92,0.4)";
+    ctx.beginPath(); ctx.moveTo(3.4, -0.6); ctx.quadraticCurveTo(5, 0.2, 6.6, -0.4); ctx.quadraticCurveTo(5, -0.2, 3.4, -0.6); ctx.closePath(); ctx.fill();
+
+    // Ceja con pelo y arco.
+    ctx.strokeStyle = lerpColor(HAIR, "#2a1408", 0.4); ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(2.4, -8); ctx.quadraticCurveTo(4.4, -8.6, 6.4, -8.2); ctx.stroke();
+
+    // Ojo: esclera, iris avellana, pupila, prpado y brillo.
+    ctx.fillStyle = "rgba(248,240,228,0.95)";
+    ctx.beginPath(); ctx.ellipse(4.6, -4.8, 1.5, 1.8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#6e4a2c";
+    ctx.beginPath(); ctx.ellipse(4.9, -4.7, 1.1, 1.3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#1a0e08";
+    ctx.beginPath(); ctx.ellipse(5, -4.6, 0.6, 0.9, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.95)";
+    ctx.beginPath(); ctx.arc(4.8, -4.9, 0.4, 0, Math.PI * 2); ctx.fill();
+    // Prpado superior y pestaas.
+    ctx.strokeStyle = "#3a241a"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(3.2, -6); ctx.quadraticCurveTo(4.6, -6.4, 6, -6); ctx.stroke();
+    ctx.strokeStyle = "rgba(40,24,16,0.6)"; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(3.6, -5.6); ctx.lineTo(3.8, -4.4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(5.2, -5.5); ctx.lineTo(5.4, -4.2); ctx.stroke();
+
+    // Lentes: montura, puente, varilla y reflejo del cristal.
+    ctx.fillStyle = "rgba(190,224,255,0.1)";
+    roundRect(2, -6.8, 5.8, 4.6, 1.4); ctx.fill();
+    ctx.strokeStyle = "rgba(40,48,60,0.92)"; ctx.lineWidth = 0.9;
+    roundRect(2, -6.8, 5.8, 4.6, 1.4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(7.8, -5.9); ctx.lineTo(9.4, -6); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(2, -5.9); ctx.lineTo(-2.4, -6.2); ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,0.7)"; ctx.lineWidth = 0.6;
+    ctx.beginPath(); ctx.moveTo(3, -6.3); ctx.lineTo(5, -6.6); ctx.stroke();
+
+    // Pelo: masa superior con entrada natural y mechones.
     ctx.fillStyle = HAIR;
     ctx.beginPath();
     ctx.moveTo(-7.6, -5.4);
-    ctx.quadraticCurveTo(-9.2, -16.4, 1.8, -17);
-    ctx.quadraticCurveTo(11, -15.6, 9.2, -5);
-    ctx.lineTo(6.2, -10);
-    ctx.lineTo(3.4, -4.8);
-    ctx.lineTo(0.2, -10.4);
-    ctx.lineTo(-2.8, -4.8);
-    ctx.lineTo(-4.8, -9.4);
-    ctx.closePath();
-    ctx.fill();
-    // Mechón de la nuca y flequillo, ambos con retardo respecto al cuerpo.
+    ctx.quadraticCurveTo(-9.4, -16.8, 0.4, -17.4);
+    ctx.quadraticCurveTo(11.2, -16, 9.6, -5);
+    ctx.lineTo(6.4, -10.2);
+    ctx.lineTo(3.6, -5);
+    ctx.lineTo(0.2, -10.8);
+    ctx.lineTo(-2.8, -5);
+    ctx.lineTo(-4.8, -9.6);
+    ctx.closePath(); ctx.fill();
+    // Brillo del pelo.
+    ctx.fillStyle = lerpColor(HAIR_HI, "#3a1a0e", 0.3);
+    ctx.beginPath();
+    ctx.moveTo(-5.4, -11.4); ctx.quadraticCurveTo(0, -16.4, 6.4, -12.4);
+    ctx.quadraticCurveTo(2, -14.4, -2, -13.4); ctx.closePath(); ctx.fill();
+    // Mechones laterales con retardo.
+    ctx.fillStyle = HAIR;
     ctx.beginPath();
     ctx.moveTo(-6.2, -12.6);
     ctx.quadraticCurveTo(-10.6 - sway * 3.4, -12.8, -11.4 - sway * 4, -7.6);
-    ctx.quadraticCurveTo(-8.6, -9, -6.8, -7.2);
-    ctx.closePath();
-    ctx.fill();
+    ctx.quadraticCurveTo(-8.6, -9, -6.8, -7.2); ctx.closePath(); ctx.fill();
     ctx.beginPath();
     ctx.moveTo(6.4, -12.6);
     ctx.quadraticCurveTo(10.4 - sway * 1.8, -11.6, 10 - sway * 2.2, -7.4);
-    ctx.quadraticCurveTo(8.4, -9.4, 7, -8);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = HAIR_HI;
-    ctx.lineWidth = 1;
+    ctx.quadraticCurveTo(8.4, -9.4, 7, -8); ctx.closePath(); ctx.fill();
+    // Patenas sobre la frente.
+    ctx.strokeStyle = HAIR_HI; ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(-5, -12);
-    ctx.quadraticCurveTo(0.2, -16.4, 7.4, -10.8);
-    ctx.moveTo(-3, -14.4);
-    ctx.quadraticCurveTo(2, -17, 6, -14.4);
+    ctx.moveTo(-5, -12); ctx.quadraticCurveTo(0.2, -16.6, 7.4, -11);
+    ctx.moveTo(-3, -14.6); ctx.quadraticCurveTo(2, -17.2, 6, -14.6);
     ctx.stroke();
     ctx.restore();
   }
@@ -3513,7 +3543,7 @@
     baseTransform(sx, sy);
     drawBackground(camX);
     if (!world) {
-      baseTransform();
+      screenTransform();
       return;
     }
     const p = world.player;
@@ -3534,7 +3564,7 @@
     drawParticles(camX);
     drawRings(camX);
     drawSigns(camX, p);
-    baseTransform();
+    screenTransform();
     drawVignette();
     drawHudCanvas();
   }
