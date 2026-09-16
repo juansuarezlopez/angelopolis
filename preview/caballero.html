@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vista previa — Caballero con sprites de IA</title>
+<style>
+  :root { --gold:#e8c872; --ivory:#f4efe4; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh;
+    background: radial-gradient(ellipse at 50% 40%, #171226 0%, #07060d 70%);
+    color: var(--ivory);
+    font-family: Cinzel, Palatino, "Times New Roman", serif;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 18px 14px 40px;
+  }
+  h1 { font-size: 22px; letter-spacing: .1em; margin: 0 0 2px; color: var(--gold); }
+  .sub { font-size: 12px; color: #9c927f; margin: 0 0 16px; letter-spacing: .06em; }
+  .stage {
+    position: relative;
+    border: 1px solid rgba(232,200,114,.28);
+    box-shadow: 0 20px 60px rgba(0,0,0,.6);
+    background:
+      linear-gradient(180deg, #12101f 0%, #1a1526 62%, #241d2e 62%, #191426 100%);
+  }
+  canvas { display: block; width: min(94vw, 900px); height: auto; }
+  .panel {
+    display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+    margin: 16px 0 6px; max-width: 900px;
+  }
+  button {
+    appearance: none; cursor: pointer;
+    border: 1px solid rgba(232,200,114,.55);
+    background: linear-gradient(180deg, #2c2416, #16120b);
+    color: var(--gold);
+    font-family: inherit; font-size: 12px; letter-spacing: .1em;
+    text-transform: uppercase; padding: 9px 15px;
+  }
+  button.on { background: linear-gradient(180deg, #5c4a1e, #2e2410); color: #fff6d8; }
+  .row { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; justify-content: center;
+         font-size: 12px; color: #b3a891; letter-spacing: .05em; }
+  label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  input[type=range] { width: 150px; }
+  .legend { max-width: 780px; margin-top: 18px; font-size: 12.5px; line-height: 1.85;
+            color: #a89d88; text-align: center; }
+  .legend b { color: var(--gold); font-weight: 600; }
+  .warn { color: #d99; font-size: 12px; margin-top: 8px; }
+</style>
+</head>
+<body>
+  <h1>Caballero — sprites de IA sobre rig vectorial</h1>
+  <p class="sub">Vista previa. No está implementado en el juego.</p>
+
+  <div class="stage"><canvas id="cv" width="900" height="560"></canvas></div>
+
+  <div class="panel" id="anims"></div>
+  <div class="row">
+    <label><input type="checkbox" id="skel" /> esqueleto vectorial</label>
+    <label><input type="checkbox" id="boxes" /> caja de cada pieza</label>
+    <label><input type="checkbox" id="slow" /> lento</label>
+    <label>zoom <input type="range" id="zoom" min="4" max="13" step="0.5" value="8" /></label>
+  </div>
+  <p class="warn" id="warn"></p>
+
+  <p class="legend">
+    Cada pieza es un <b>sprite generado por IA</b> (acero pulido, cuero y plumas con
+    luz de luna) recortado con chroma key y <b>colgado del rig vectorial</b>: cadera,
+    rodilla, tobillo, hombro y codo siguen siendo articulaciones, así que las
+    animaciones se calculan igual que ahora. La <b>capa</b> se queda vectorial porque
+    es física dinámica.
+  </p>
+
+<script>
+(() => {
+  "use strict";
+  const cv = document.getElementById("cv");
+  const ctx = cv.getContext("2d");
+  const W = cv.width, H = cv.height;
+
+  // --- Constantes del rig, iguales a las del juego --------------------
+  const THIGH = 15, SHIN = 12.5, UPPER_ARM = 10, FOREARM = 9;
+  const SH_Y = -13, HIP_Y = -30;
+
+  // --- Piezas: recorte en el PNG + tamaño y ancla en el rig ----------
+  // box = [sx, sy, sw, sh] del contenido dentro del PNG de 1024.
+  // ax/ay = punto de anclaje (0..1) que se pega a la articulación.
+  const PARTS = {
+    coraza:    { file:"parte-coraza.png",    box:[286,94,449,810],  h:29,   ax:.50, ay:.66, flip:true },
+    brazo:     { file:"parte-brazo.png",     box:[320,74,323,873],  h:13.5, ax:.50, ay:.06 },
+    antebrazo: { file:"parte-antebrazo.png", box:[379,44,261,937],  h:16.5, ax:.50, ay:.08 },
+    muslo:     { file:"parte-muslo.png",     box:[358,48,324,924],  h:17.5, ax:.50, ay:.05, flip:true },
+    greba:     { file:"parte-greba.png",     box:[358,78,371,640],  h:15.5, ax:.45, ay:.10 },
+    bota:      { file:"parte-greba.png",     box:[358,700,371,225], h:6.5,  ax:.36, ay:.06 },
+    escudo:    { file:"parte-escudo.png",    box:[188,45,646,898],  h:23,   ax:.50, ay:.50 },
+    espada:    { file:"parte-espada.png",    box:[19,366,985,246],  w:40,   ax:.18, ay:.50 },
+    ala:       { file:"parte-ala.png",       box:[34,100,950,812],  w:46,   ax:.93, ay:.72 },
+    cabeza:    { file:"parte-cabeza.png",    box:[0,20,1024,760],   w:22,   ax:.50, ay:.51 },
+    hombrera:  { file:"parte-hombrera.png",  box:null,              w:10,   ax:.50, ay:.62 },
+  };
+
+  let pending = 0, failed = [];
+  for (const k in PARTS) {
+    const p = PARTS[k];
+    if (p.img) continue;
+    const shared = Object.values(PARTS).find(o => o.file === p.file && o.img);
+    if (shared) { p.img = shared.img; continue; }
+    const im = new Image();
+    pending++;
+    im.onload = () => { pending--; };
+    im.onerror = () => { pending--; failed.push(p.file); };
+    im.src = "sprites/" + p.file;
+    p.img = im;
+  }
+
+  // Dibuja una pieza anclada en el origen actual del contexto.
+  function part(key, dim) {
+    const p = PARTS[key];
+    const im = p.img;
+    if (!im || !im.complete || !im.naturalWidth) return;
+    const box = p.box || [0, 0, im.naturalWidth, im.naturalHeight];
+    const [sx, sy, sw, sh] = box;
+    const dw = p.w != null ? p.w : p.h * sw / sh;
+    const dh = p.h != null ? p.h : p.w * sh / sw;
+    const dx = -p.ax * dw, dy = -p.ay * dh;
+    ctx.save();
+    if (p.flip) ctx.scale(-1, 1);
+    const fx = p.flip ? -(dx + dw) : dx;      // al espejar, recolocar en X
+    if (dim) {
+      // Pieza lejana: más oscura y desaturada. Con filter, no con
+      // composite, para no teñir lo que ya está dibujado detrás.
+      ctx.filter = `brightness(${(1 - dim * .45).toFixed(3)}) saturate(${(1 - dim * .35).toFixed(3)})`;
+    }
+    ctx.drawImage(im, sx, sy, sw, sh, fx, dy, dw, dh);
+    ctx.restore();
+    if (showBoxes) {
+      ctx.save();
+      if (p.flip) ctx.scale(-1, 1);
+      ctx.strokeStyle = "rgba(120,220,255,.55)";
+      ctx.lineWidth = .25;
+      ctx.strokeRect(fx, dy, dw, dh);
+      ctx.restore();
+    }
+  }
+
+  // --- Rig: mismos ángulos y misma convención que el juego -----------
+  // Rodilla POSITIVA = flexión, el pie queda detrás de la rodilla.
+  const rig = {
+    lean:.05, crouch:0, bob:0,
+    hipF:.07, kneeF:.14, ankleF:0,
+    hipB:-.07, kneeB:.14, ankleB:0,
+    shF:-.2, elF:-.4, shB:-.1, elB:-1.15,
+    head:.02, grip:1.35, wing:0,
+  };
+  const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
+  const approach = (cur, tgt, rate, dt) => cur + (tgt - cur) * (1 - Math.exp(-rate * dt));
+
+  let mode = "idle", t = 0, ph = 0, attack = 0, land = 0;
+
+  function updateRig(dt) {
+    t += dt;
+    const run = mode === "run";
+    const air = mode === "rise" || mode === "fall" || mode === "wings";
+    const slide = mode === "dash";
+    ph += dt * (run ? 10 : 6);
+    if (mode === "attack") {
+      attack -= dt;
+      if (attack <= 0) attack = .28;          // repite el golpe en bucle
+    } else attack = 0;
+
+    let lean = .05, crouch = 0;
+    let hipF = .07, kneeF = .14, hipB = -.07, kneeB = .14;
+    let shF = -.2, elF = -.4, shB = -.1, elB = -1.15, head = .02;
+
+    if (!slide && !air && !run) {             // reposo: respiración
+      const br = Math.sin(t * 2.2);
+      crouch = .04 + br * .03;
+      head += br * .04; shF += br * .05; shB -= br * .05; lean += br * .02;
+    }
+
+    if (slide) {
+      crouch = 1; lean = .85;
+      hipF = 1.35; kneeF = .25; hipB = .35; kneeB = 1.9;
+      shF = .75; elF = -.2; shB = .35; elB = -1.3; head = -.34;
+    } else if (air) {
+      const rising = mode === "rise" || mode === "wings";
+      lean = rising ? .13 : -.03;
+      hipF = rising ? .66 : .38; kneeF = rising ? 1 : .5;
+      hipB = rising ? -.3 : -.52; kneeB = rising ? .6 : 1;
+      shF = rising ? -.75 : .15; elF = -.5; shB = -.05; elB = -1.1;
+      head = rising ? -.07 : .06;
+    } else if (run) {
+      const s = Math.sin(ph);
+      lean = .17;
+      hipF = .5 * s;  kneeF = .65 - .4 * s;
+      hipB = -.5 * s; kneeB = .65 + .4 * s;
+      shF = -.2 - .34 * s;
+      elF = -.4 - .18 * (.5 + .5 * Math.cos(ph));
+      shB = -.1 + .1 * s;
+      elB = -1.15; head = .05;
+    }
+
+    if (attack > 0) {                          // 3 fases del espadazo
+      const k0 = clamp(1 - attack / .28, 0, 1);
+      if (k0 < .2) {
+        const a = k0 / .2;
+        shF = .4 + a * 1.0; elF = -.5 - a * .7;
+        lean -= a * .12; head -= a * .08; shB += a * .3;
+        crouch = Math.max(crouch, a * .15);
+      } else if (k0 < .55) {
+        const k = (k0 - .2) / .35, e = Math.sin(k * Math.PI);
+        shF = 1.4 - k * 2.7; elF = -1.2 + k * 1.0;
+        lean += .18 * e; head += .12 * e;
+        crouch = Math.max(crouch, .12 * e);
+        kneeF += .25 * e;
+      } else {
+        const k = (k0 - .55) / .45;
+        shF = -1.3 + k * .5; elF = -.2 - k * .3;
+        lean -= (1 - k) * .06;
+      }
+    }
+
+    const rate = 17;
+    rig.lean  = approach(rig.lean, lean, rate, dt);
+    rig.crouch= approach(rig.crouch, crouch, slide ? 26 : 13, dt);
+    rig.hipF  = approach(rig.hipF, hipF, rate, dt);
+    rig.kneeF = approach(rig.kneeF, kneeF, rate, dt);
+    rig.hipB  = approach(rig.hipB, hipB, rate, dt);
+    rig.kneeB = approach(rig.kneeB, kneeB, rate, dt);
+    rig.shF   = approach(rig.shF, shF, attack > 0 ? 34 : rate, dt);
+    rig.elF   = approach(rig.elF, elF, attack > 0 ? 34 : rate, dt);
+    rig.shB   = approach(rig.shB, shB, rate, dt);
+    rig.elB   = approach(rig.elB, elB, rate, dt);
+    rig.head  = approach(rig.head, head, 12, dt);
+    rig.grip  = approach(rig.grip, attack > 0 ? .35 : 1.35, 26, dt);
+    rig.ankleF= approach(rig.ankleF, clamp(-(rig.hipF + rig.kneeF) * .55, -.5, .5), rate, dt);
+    rig.ankleB= approach(rig.ankleB, clamp(-(rig.hipB + rig.kneeB) * .55, -.5, .5), rate, dt);
+    rig.bob   = run ? Math.abs(Math.sin(ph)) * 1.5 : Math.sin(t * 3) * .4;
+    rig.wing  = approach(rig.wing, mode === "wings" ? 1 : 0, 9, dt);
+  }
+
+  // --- Piezas compuestas ---------------------------------------------
+  function leg(front) {
+    const dim = front ? 0 : .34;
+    const hip  = front ? rig.hipF : rig.hipB;
+    const knee = front ? rig.kneeF : rig.kneeB;
+    const ank  = front ? rig.ankleF : rig.ankleB;
+    ctx.save();
+    ctx.rotate(hip);
+    part("muslo", dim);
+    ctx.translate(0, THIGH); ctx.rotate(knee);
+    part("greba", dim);
+    ctx.translate(0, SHIN); ctx.rotate(ank);
+    part("bota", dim);
+    ctx.restore();
+  }
+
+  function arm(sh, el, dim, hand) {
+    ctx.save();
+    ctx.rotate(sh);
+    part("brazo", dim);
+    ctx.translate(0, UPPER_ARM); ctx.rotate(el);
+    part("antebrazo", dim);
+    ctx.translate(0, FOREARM);
+    if (hand) hand();
+    ctx.restore();
+  }
+
+  // Capa: sigue siendo vectorial (física dinámica).
+  const CAPE_LEN = [9, 8.5, 8, 7], CAPE_W = [13, 12.5, 11, 8.5, 5.5];
+  const capeAng = [.3,.12,.09,.06], capeVel = [0,0,0,0];
+  function updateCape(dt) {
+    const target = [.30 + rig.lean * .5, .12, .09, .06];
+    const wind = mode === "run" ? .5 : mode === "dash" ? 1.1 : .16;
+    for (let i = 0; i < capeAng.length; i++) {
+      const tg = target[i] + Math.sin(t * (2.3 + i * .7) + i) * wind * .32;
+      capeVel[i] += (tg - capeAng[i]) * 26 * dt;
+      capeVel[i] *= Math.exp(-6 * dt);
+      capeAng[i] += capeVel[i] * dt;
+    }
+  }
+  function cape() {
+    const pts = []; let cx = -3.5, cy = SH_Y - 1, ang = 0;
+    for (let i = 0; i < CAPE_LEN.length; i++) {
+      ang += capeAng[i];
+      pts.push({ x: cx, y: cy, ang });
+      cx += -Math.sin(ang) * CAPE_LEN[i];
+      cy += Math.cos(ang) * CAPE_LEN[i];
+    }
+    pts.push({ x: cx, y: cy, ang });
+    const L = [], R = [];
+    for (let i = 0; i < pts.length; i++) {
+      const w = CAPE_W[i] / 2, nx = Math.cos(pts[i].ang), ny = Math.sin(pts[i].ang);
+      L.push([pts[i].x - nx * w, pts[i].y - ny * w]);
+      R.push([pts[i].x + nx * w, pts[i].y + ny * w]);
+    }
+    const tip = pts[pts.length - 1];
+    const g = ctx.createLinearGradient(-3.5, SH_Y - 1, tip.x, tip.y);
+    g.addColorStop(0, "#6a8af0"); g.addColorStop(.25, "#3e5cc6");
+    g.addColorStop(.55, "#2646a6"); g.addColorStop(.8, "#162a6e");
+    g.addColorStop(1, "#0c1640");
+    ctx.beginPath();
+    ctx.moveTo(L[0][0], L[0][1]);
+    for (let i = 1; i < L.length; i++) ctx.lineTo(L[i][0], L[i][1]);
+    for (let i = R.length - 1; i >= 0; i--) ctx.lineTo(R[i][0], R[i][1]);
+    ctx.closePath();
+    ctx.fillStyle = g; ctx.fill();
+    ctx.strokeStyle = "rgba(200,222,255,.35)"; ctx.lineWidth = .5; ctx.stroke();
+  }
+
+  function wing(far) {
+    const a = rig.wing;
+    if (a < .02) return;
+    const beat = Math.sin(t * 7) * .18;
+    ctx.save();
+    ctx.translate(-4, SH_Y - 2);
+    ctx.rotate(-.28 + beat + (far ? .16 : 0));
+    ctx.globalAlpha = a * (far ? .72 : 1);
+    ctx.scale(far ? .88 : 1, far ? .88 : 1);
+    // Resplandor santo detrás de las plumas.
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    const hg = ctx.createRadialGradient(-16, -6, 1, -16, -6, 34);
+    hg.addColorStop(0, "rgba(255,246,214,.42)");
+    hg.addColorStop(1, "rgba(255,214,120,0)");
+    ctx.fillStyle = hg; ctx.fillRect(-52, -40, 76, 76);
+    ctx.restore();
+    part("ala", far ? .3 : 0);
+    ctx.restore();
+  }
+
+  // --- Ensamblaje: de atrás hacia adelante ---------------------------
+  let showSkel = false, showBoxes = false;
+
+  function drawKnight() {
+    // Cadera desde el alcance de la pierna más estirada (igual que el juego).
+    const reach = (h, k) => THIGH * Math.cos(h) + SHIN * Math.cos(h + k) + 2.6;
+    let pelvisY = HIP_Y + rig.bob * .4;
+    const grounded = !(mode === "rise" || mode === "fall" || mode === "wings");
+    if (grounded) pelvisY = -Math.max(reach(rig.hipF, rig.kneeF), reach(rig.hipB, rig.kneeB));
+    const torsoY = pelvisY - 3;
+
+    wing(true);                                   // ala lejana
+
+    ctx.save(); ctx.translate(0, torsoY); ctx.rotate(rig.lean);
+    cape();
+    ctx.restore();
+
+    ctx.save(); ctx.translate(-2.4, pelvisY); leg(false); ctx.restore();
+    ctx.save(); ctx.translate(2.8, pelvisY);  leg(true);  ctx.restore();
+
+    ctx.save(); ctx.translate(0, torsoY); ctx.rotate(rig.lean);
+
+    // Hombro lejano y su brazo con el escudo.
+    ctx.save(); ctx.translate(-4.6, SH_Y); part("hombrera", .34); ctx.restore();
+    part("coraza", 0);
+    ctx.save(); ctx.translate(-4.6, SH_Y + .6);
+    arm(rig.shB, rig.elB, .3, () => {
+      ctx.save();
+      ctx.translate(0, -FOREARM * .45);
+      ctx.rotate(-(rig.shB + rig.elB) + .12);
+      ctx.translate(-5.5, 4);
+      part("escudo", 0);
+      ctx.restore();
+    });
+    ctx.restore();
+
+    // Cabeza, luego brazo cercano, luego hombrera encima.
+    ctx.save();
+    ctx.translate(.6, SH_Y - 13); ctx.rotate(rig.head);
+    ctx.fillStyle = "#d79c76";                    // cuello vectorial
+    ctx.beginPath(); ctx.roundRect(-2.6, 2, 5.6, 7, 2); ctx.fill();
+    part("cabeza", 0);
+    ctx.restore();
+
+    ctx.save(); ctx.translate(5.4, SH_Y + .8);
+    arm(rig.shF, rig.elF, 0, () => {
+      ctx.save();
+      ctx.translate(1.2, 3); ctx.rotate(rig.grip);
+      part("espada", 0);
+      ctx.restore();
+    });
+    ctx.restore();
+
+    ctx.save(); ctx.translate(5.4, SH_Y); part("hombrera", 0); ctx.restore();
+    ctx.restore();
+
+    wing(false);                                  // ala cercana
+
+    if (showSkel) skeleton(pelvisY, torsoY);
+  }
+
+  function skeleton(pelvisY, torsoY) {
+    const bone = (x1,y1,x2,y2) => { ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); };
+    const joint = (x,y) => { ctx.beginPath(); ctx.arc(x,y,.85,0,7); ctx.fill(); };
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,90,90,.9)"; ctx.lineWidth = .45;
+    ctx.fillStyle = "rgba(255,220,90,.95)";
+    // Piernas.
+    for (const [ox, hip, knee, ank] of [
+      [-2.4, rig.hipB, rig.kneeB, rig.ankleB],
+      [ 2.8, rig.hipF, rig.kneeF, rig.ankleF],
+    ]) {
+      const kx = ox - Math.sin(hip) * THIGH, ky = pelvisY + Math.cos(hip) * THIGH;
+      const ax = kx - Math.sin(hip + knee) * SHIN, ay = ky + Math.cos(hip + knee) * SHIN;
+      bone(ox, pelvisY, kx, ky); bone(kx, ky, ax, ay);
+      joint(ox, pelvisY); joint(kx, ky); joint(ax, ay);
+    }
+    // Torso y brazos.
+    ctx.save(); ctx.translate(0, torsoY); ctx.rotate(rig.lean);
+    bone(0, 0, 0, SH_Y);
+    for (const [ox, sh, el] of [[-4.6, rig.shB, rig.elB], [5.4, rig.shF, rig.elF]]) {
+      const ex = ox - Math.sin(sh) * UPPER_ARM, ey = SH_Y + Math.cos(sh) * UPPER_ARM;
+      const hx = ex - Math.sin(sh + el) * FOREARM, hy = ey + Math.cos(sh + el) * FOREARM;
+      bone(ox, SH_Y, ex, ey); bone(ex, ey, hx, hy);
+      joint(ox, SH_Y); joint(ex, ey); joint(hx, hy);
+    }
+    joint(.6, SH_Y - 8.5);
+    ctx.restore();
+    ctx.restore();
+  }
+
+  // --- Escena --------------------------------------------------------
+  const zoomEl = document.getElementById("zoom");
+  const slowEl = document.getElementById("slow");
+  const warnEl = document.getElementById("warn");
+  document.getElementById("skel").onchange = (e) => showSkel = e.target.checked;
+  document.getElementById("boxes").onchange = (e) => showBoxes = e.target.checked;
+
+  const MODES = [
+    ["idle", "reposo"], ["run", "correr"], ["rise", "salto"],
+    ["fall", "caída"], ["wings", "alas"], ["attack", "espadazo"], ["dash", "derrape"],
+  ];
+  const bar = document.getElementById("anims");
+  const btns = {};
+  for (const [id, label] of MODES) {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.onclick = () => {
+      mode = id; ph = 0;
+      for (const k in btns) btns[k].classList.toggle("on", k === id);
+    };
+    bar.appendChild(b); btns[id] = b;
+  }
+  btns.idle.classList.add("on");
+
+  let last = 0;
+  function frame(ts) {
+    let dt = last ? (ts - last) / 1000 : .016;
+    last = ts;
+    if (dt > .05) dt = .05;
+    if (slowEl.checked) dt *= .35;
+    updateRig(dt);
+    updateCape(dt);
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    // Suelo de adoquín tenue como referencia de escala.
+    const zoom = Number(zoomEl.value);
+    const groundY = H * .82;
+    ctx.fillStyle = "rgba(60,52,78,.55)";
+    ctx.fillRect(0, groundY, W, H - groundY);
+    ctx.strokeStyle = "rgba(120,108,150,.35)"; ctx.lineWidth = 1;
+    for (let x = (-(ts * .0) % 46); x < W; x += 46) {
+      ctx.beginPath(); ctx.moveTo(x, groundY); ctx.lineTo(x, H); ctx.stroke();
+    }
+    ctx.beginPath(); ctx.moveTo(0, groundY); ctx.lineTo(W, groundY); ctx.stroke();
+
+    // Sombra bajo los pies.
+    ctx.save();
+    ctx.translate(W / 2, groundY);
+    const sg = ctx.createRadialGradient(0, 0, 1, 0, 0, 60 * zoom / 8);
+    sg.addColorStop(0, "rgba(0,0,0,.5)"); sg.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = sg;
+    ctx.beginPath(); ctx.ellipse(0, 0, 46 * zoom / 8, 8 * zoom / 8, 0, 0, 7); ctx.fill();
+    ctx.restore();
+
+    // El héroe: pies en el suelo, escalado por el zoom.
+    ctx.save();
+    ctx.translate(W / 2, groundY);
+    ctx.scale(zoom, zoom);
+    if (!grounded()) ctx.translate(0, -3);
+    drawKnight();
+    ctx.restore();
+
+    if (pending === 0 && failed.length) {
+      warnEl.textContent = "No cargaron: " + failed.join(", ");
+    }
+    requestAnimationFrame(frame);
+  }
+  const grounded = () => !(mode === "rise" || mode === "fall" || mode === "wings");
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
