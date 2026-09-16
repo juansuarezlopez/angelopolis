@@ -6,6 +6,32 @@
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
 
+  // Sprite de la cabeza generado por IA (alta fidelidad). Se dibuja
+  // sobre el rig del héroe; si aun no carga, se usa el dibujo vectorial.
+  const headSprite = new Image();
+  headSprite.onload = () => { headSprite._ready = true; };
+  headSprite.src = (window.__HEAD_SPRITE) || "assets/heroe-cabeza.png";
+  // Algunos navegadores headless no disparan onload para data URIs grandes;
+  // por eso marcamos _ready tan pronto como la imagen este completa.
+  const markReady = () => {
+    if (headSprite.complete && headSprite.naturalWidth > 0) headSprite._ready = true;
+    else setTimeout(markReady, 50);
+  };
+  setTimeout(markReady, 0);
+  window.__headSprite = headSprite;
+
+  // Sprite de la hombrera generado por IA (alta fidelidad).
+  const pauldronSprite = new Image();
+  pauldronSprite.onload = () => { pauldronSprite._ready = true; };
+  pauldronSprite.src = (window.__PAULDRON_SPRITE) || "assets/heroe-hombrera.png";
+  const markPauldronReady = () => {
+    if (pauldronSprite.complete && pauldronSprite.naturalWidth > 0) pauldronSprite._ready = true;
+    else setTimeout(markPauldronReady, 50);
+  };
+  setTimeout(markPauldronReady, 0);
+  window.__pauldronSprite = pauldronSprite;
+
+
   // El lienzo lógico mide 960x540, pero el búfer se dibuja a la densidad real
   // de la pantalla para que el detalle vectorial no se pierda al estirarlo.
   let pixelScale = 1;
@@ -14,17 +40,30 @@
   const VIEW_LIFT = 34;
 
   function fitBuffer() {
-    let shown = 1;
-    if (typeof canvas.getBoundingClientRect === "function") {
-      const r = canvas.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0) shown = Math.min(r.width / W, r.height / H);
-    }
+    // Tamaño visible del viewport en CSS px. En móvil girado el viewport
+    // no es 16:9, asi que hay que letterboxear (no estirar el lienzo).
+    const root = document.documentElement || {};
+    const vw = root.clientWidth || window.innerWidth || W;
+    const vh = root.clientHeight || window.innerHeight || H;
+    // Caja 16:9 que cabe en el viewport (letterbox).
+    let scale = Math.min(vw / W, vh / H);
+    if (!isFinite(scale) || scale <= 0) scale = 1;
+    const dispW = W * scale;
+    const dispH = H * scale;
+    // Buffer a la densidad real de esa caja (nitido en retina).
     const dpr = window.devicePixelRatio || 1;
-    const next = Math.min(3, Math.max(1, Math.round(shown * dpr * 100) / 100));
-    if (Math.abs(next - pixelScale) < 0.05) return;
+    const next = Math.min(3, Math.max(1, Math.round(scale * dpr * 100) / 100));
+    if (
+      Math.abs(next - pixelScale) < 0.05 &&
+      canvas.style.width === dispW + "px" &&
+      canvas.style.height === dispH + "px"
+    ) return;
     pixelScale = next;
     canvas.width = Math.round(W * pixelScale);
     canvas.height = Math.round(H * pixelScale);
+    // Fija el tamaño de presentacion en px (letterbox centrado por #app).
+    canvas.style.width = dispW + "px";
+    canvas.style.height = dispH + "px";
   }
 
   // Vuelve al sistema de coordenadas lógico, con el temblor de cámara y el
@@ -49,7 +88,7 @@
   const crossBtnEl = document.getElementById("btn-cross");
 
   const CROSS_COST = 22;
-  const MANA_REGEN = 15;
+  const MANA_REGEN = 10.5;
   const CROSS_RANGE = 620;
   const PLAYER_H = 38;
   const SLIDE_H = 21;
@@ -721,7 +760,7 @@
   }
 
   function swordHitbox(p) {
-    const reach = 34;
+    const reach = 52;
     const x = p.facing > 0 ? p.x + p.w - 4 : p.x - reach + 4;
     return { x, y: p.y + 4, w: reach, h: p.h === PLAYER_H ? 26 : 16 };
   }
@@ -2073,10 +2112,10 @@
       crouch: 0,
       bob: 0,
       hipB: -0.05,
-      kneeB: -0.12,
+      kneeB: 0.12,
       ankleB: 0,
       hipF: 0.05,
-      kneeF: -0.12,
+      kneeF: 0.12,
       ankleF: 0,
       shB: -0.12,
       elB: -0.95,
@@ -2104,23 +2143,34 @@
     let lean = 0.05;
     let crouch = 0;
     let hipF = 0.07;
-    let kneeF = -0.14;
+    let kneeF = 0.14;
     let hipB = -0.07;
-    let kneeB = -0.14;
+    let kneeB = 0.14;
     let shF = -0.2;
     let elF = -0.4;
     let shB = -0.1;
     let elB = -1.15;
     let head = 0.02;
 
+    // Reposo: respiracion lenta. El cuerpo se asienta y la cabeza y los
+    // brazos oscilan apenas; da vida sin que se vea rigido.
+    if (!slide && !air && !run) {
+      const br = Math.sin(time * 2.2);
+      crouch = 0.04 + br * 0.03;
+      head += br * 0.04;
+      shF += br * 0.05;
+      shB -= br * 0.05;
+      lean += br * 0.02;
+    }
+
     if (slide) {
       // Derrape: cadera baja, pierna de adelante estirada, torso echado.
       crouch = 1;
       lean = 0.85;
       hipF = 1.35;
-      kneeF = -0.25;
+      kneeF = 0.25;
       hipB = 0.35;
-      kneeB = -1.9;
+      kneeB = 1.9;
       shF = 0.75;
       elF = -0.2;
       shB = 0.35;
@@ -2130,50 +2180,74 @@
       const rising = p.vy < 0;
       lean = rising ? 0.13 : -0.03;
       hipF = rising ? 0.66 : 0.38;
-      kneeF = rising ? -1 : -0.5;
+      kneeF = rising ? 1 : 0.5;
       hipB = rising ? -0.3 : -0.52;
-      kneeB = rising ? -0.6 : -1;
+      kneeB = rising ? 0.6 : 1;
       shF = rising ? -0.75 : 0.15;
       elF = -0.5;
       shB = -0.05;
       elB = -1.1;
       head = rising ? -0.07 : 0.06;
     } else if (run) {
-      // Ciclo de carrera: la rodilla sólo se dobla hacia atrás y va
-      // retrasada respecto a la cadera, como en una zancada real.
+      // Ciclo de carrera humano: la cadera balancea poco y la rodilla
+      // es la que levanta el pie. Cuando la pierna balancea hacia ADELANTE
+      // (hip negativo) la rodilla se DOBLA y el pie queda DETRAS de la
+      // rodilla (no como carnera); la pierna de atras queda estirada para
+      // empujar. s = sin(ph): s>0 => pierna cerca atras (apoyo); s<0 =>
+      // pierna cerca adelante (balanceo).
       const s = Math.sin(ph);
       lean = 0.17;
-      hipF = 0.74 * s;
-      kneeF = -0.28 - 0.62 * (0.5 - 0.5 * Math.cos(ph - 1.7));
-      hipB = -0.74 * s;
-      kneeB = -0.28 - 0.62 * (0.5 - 0.5 * Math.cos(ph + Math.PI - 1.7));
+      hipF = 0.5 * s;
+      kneeF = 0.65 - 0.4 * s;
+      hipB = -0.5 * s;
+      kneeB = 0.65 + 0.4 * s;
       shF = -0.2 - 0.34 * s;
       elF = -0.4 - 0.18 * (0.5 + 0.5 * Math.cos(ph));
-      shB = -0.1 + 0.3 * s;
+      // El brazo del escudo va casi fijo en guardia: apenas balancea
+      // para que el escudo no clipee ni baile durante la carrera.
+      shB = -0.1 + 0.1 * s;
       elB = -1.15;
       head = 0.05;
     }
 
-    // Aterrizaje: absorbe el golpe con las rodillas.
+    // Aterrizaje: absorbe el golpe doblando las rodillas (flexion positiva).
     if (p.landDust > 0) {
       const k = clamp(p.landDust / 0.2, 0, 1) * 0.55;
-      kneeF -= k;
-      kneeB -= k;
+      kneeF += k;
+      kneeB += k;
       crouch = Math.max(crouch, k * 0.5);
     }
 
-    // El espadazo manda sobre el brazo delantero: amago corto y tajo largo.
+    // El espadazo manda sobre el brazo delantero: anticipacion, tajo y
+    // follow-through. El cuerpo lungea hacia adelante en el golpe.
     if (p.attack > 0) {
       const t = clamp(1 - p.attack / 0.28, 0, 1);
-      if (t < 0.25) {
-        shF = 0.4 + (t / 0.25) * 0.8;
-        elF = -0.5 - (t / 0.25) * 0.5;
+      if (t < 0.2) {
+        // Anticipacion: arma atras, cuerpo se carga y escudo sube.
+        const a = t / 0.2;
+        shF = 0.4 + a * 1.0;
+        elF = -0.5 - a * 0.7;
+        lean -= a * 0.12;
+        head -= a * 0.08;
+        shB += a * 0.3;
+        crouch = Math.max(crouch, a * 0.15);
+      } else if (t < 0.55) {
+        // Tajo: descarga rapida hacia adelante con lunge del cuerpo.
+        const k = (t - 0.2) / 0.35;
+        const e = Math.sin((k) * Math.PI);           // impulso que sube y baja
+        shF = 1.4 - k * 2.7;
+        elF = -1.2 + k * 1.0;
+        lean += 0.18 * e;                            // lunge adelante en el pico
+        head += 0.12 * e;
+        crouch = Math.max(crouch, 0.12 * e);
+        kneeF += 0.25 * e;                          // pierna adelantada carga el golpe
       } else {
-        const k = (t - 0.25) / 0.75;
-        shF = 1.2 - k * 2.5;
-        elF = -1 + k * 0.85;
+        // Follow-through: la hoja sigue su inercia, el cuerpo se recupera.
+        const k = (t - 0.55) / 0.45;
+        shF = -1.3 + k * 0.5;
+        elF = -0.2 - k * 0.3;
+        lean -= (1 - k) * 0.06;
       }
-      lean += Math.sin(t * Math.PI) * 0.1;
       head += Math.sin(t * Math.PI) * 0.05;
     }
     if (p.cast > 0) {
@@ -2547,6 +2621,28 @@
 
   // --- Hombrera de tres lamas ----------------------------------------
   function drawPauldron(dim) {
+    if (pauldronSprite.complete && pauldronSprite.naturalWidth > 0) {
+      // Sprite de la hombrera en alta fidelidad. Se ancla en el hombro
+      // del rig (centro de la hombrera vectorial). dim oscurece la
+      // hombrera lejana para dar profundidad. Tamano reducido para que
+      // concuerde con el cuerpo del personaje.
+      const w = 12, h = 12 * pauldronSprite.naturalHeight / pauldronSprite.naturalWidth;
+      ctx.save();
+      if (dim > 0) {
+        // Hombrera lejana: un poco mas oscura y azulada (atmosfera).
+        ctx.filter = "none";
+        ctx.globalAlpha = 1 - dim * 0.45;
+      }
+      ctx.drawImage(pauldronSprite, -w / 2, -h * 0.62, w, h);
+      if (dim > 0) {
+        // Tinte azul oscuro por encima para diferenciarla del brazo cercano.
+        ctx.globalAlpha = dim * 0.5;
+        ctx.fillStyle = "#1a2238";
+        ctx.fillRect(-w / 2, -h * 0.62, w, h);
+      }
+      ctx.restore();
+      return;
+    }
     steelFill(() => {
       ctx.beginPath();
       ctx.ellipse(0, 0, 7.6, 5.4, 0.22, 0, Math.PI * 2);
@@ -2631,7 +2727,7 @@
     ctx.translate(0, -FOREARM * 0.45);
     ctx.rotate(upright + 0.12 - p.shield * 0.4);
     ctx.translate(-6.5, 4);
-    ctx.scale(0.78, 0.78);
+    ctx.scale(0.72, 0.72);
     steelFill(() => {
       ctx.beginPath();
       ctx.moveTo(-12.5, -15.5);
@@ -2685,31 +2781,68 @@
     ctx.save();
     ctx.translate(1.2, 3);
     ctx.rotate(grip);
-    ctx.fillStyle = "#b9c2c6";
+
+    // Pomo: esfera dorada con realce.
+    const pommel = ctx.createRadialGradient(-7, -0.7, 0.3, -6.4, 0, 2.4);
+    pommel.addColorStop(0, "#ffe9a8");
+    pommel.addColorStop(0.5, "#d9b25a");
+    pommel.addColorStop(1, "#7a5a22");
+    ctx.fillStyle = pommel;
     ctx.beginPath();
-    ctx.arc(-6.4, 0, 2, 0, Math.PI * 2);
+    ctx.arc(-6.4, 0, 2.2, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#26326a";
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.beginPath();
+    ctx.arc(-7, -0.8, 0.7, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Empuñadura: cuero oscuro con vueltas de cordel.
+    ctx.fillStyle = "#2a1d10";
     roundRect(-5.4, -1.7, 8, 3.4, 1);
     ctx.fill();
-    ctx.strokeStyle = "rgba(150,180,255,0.4)";
-    ctx.lineWidth = 0.4;
-    for (const gx of [-4, -2.4, -0.8, 0.8]) {
+    ctx.strokeStyle = "rgba(180,150,90,0.65)";
+    ctx.lineWidth = 0.5;
+    for (const gx of [-4.2, -2.6, -1, 0.6]) {
       ctx.beginPath();
       ctx.moveTo(gx, -1.7);
       ctx.lineTo(gx + 0.9, 1.7);
       ctx.stroke();
     }
+    ctx.strokeStyle = "rgba(0,0,0,0.4)";
+    ctx.lineWidth = 0.4;
+    ctx.beginPath();
+    ctx.moveTo(-5.4, -1.7); ctx.lineTo(-5.4, 1.7);
+    ctx.moveTo(2.6, -1.7); ctx.lineTo(2.6, 1.7);
+    ctx.stroke();
+
+    // Guarda: quillones curvos que se ensanchan hacia las puntas.
     steelFill(() => {
       ctx.beginPath();
-      ctx.moveTo(4.4, -7.4);
-      ctx.lineTo(7.2, -2.6);
-      ctx.lineTo(7.2, 2.6);
-      ctx.lineTo(4.4, 7.4);
-      ctx.lineTo(2.8, 4.8);
+      ctx.moveTo(4.4, -7.6);
+      ctx.quadraticCurveTo(8.4, -4.4, 8.8, -3);
+      ctx.lineTo(7.4, -1.4);
       ctx.lineTo(2.8, -4.8);
       ctx.closePath();
     }, 2, -7, 7, 7, 0);
+    steelFill(() => {
+      ctx.beginPath();
+      ctx.moveTo(4.4, 7.6);
+      ctx.quadraticCurveTo(8.4, 4.4, 8.8, 3);
+      ctx.lineTo(7.4, 1.4);
+      ctx.lineTo(2.8, 4.8);
+      ctx.closePath();
+    }, 2, -7, 7, 7, 0);
+    // Centro de la guarda.
+    steelFill(() => {
+      ctx.beginPath();
+      ctx.moveTo(2.8, -4.8);
+      ctx.lineTo(7.4, -1.4);
+      ctx.lineTo(7.4, 1.4);
+      ctx.lineTo(2.8, 4.8);
+      ctx.closePath();
+    }, 2, -7, 7, 7, 0);
+
+    // Gema azul diamantada en la guarda con brillo.
     ctx.fillStyle = GEM;
     ctx.beginPath();
     ctx.moveTo(4, 0);
@@ -2718,32 +2851,58 @@
     ctx.lineTo(5.6, 2.1);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = "rgba(214,238,255,0.85)";
-    ctx.fillRect(5, -0.9, 1.1, 0.9);
-    // Hoja con vaceo y filo iluminado.
-    const blade = ctx.createLinearGradient(8, -3, 36, 3);
-    blade.addColorStop(0, "#8e9aa3");
-    blade.addColorStop(0.42, "#fbffff");
-    blade.addColorStop(0.72, "#c6cfd4");
+    ctx.fillStyle = "rgba(214,238,255,0.9)";
+    ctx.beginPath();
+    ctx.moveTo(4.6, -0.4); ctx.lineTo(5.6, -1.6); ctx.lineTo(6.2, -0.4); ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "rgba(120,160,220,0.7)";
+    ctx.lineWidth = 0.4;
+    ctx.beginPath();
+    ctx.moveTo(4, 0); ctx.lineTo(5.6, -2.1); ctx.lineTo(7.2, 0); ctx.lineTo(5.6, 2.1); ctx.closePath();
+    ctx.stroke();
+
+    // Hoja: mas larga, con acanaladura (fuller) central y filos brillantes.
+    const blade = ctx.createLinearGradient(7, -3, 42, 3);
+    blade.addColorStop(0, "#7e8a94");
+    blade.addColorStop(0.35, "#eef4f6");
+    blade.addColorStop(0.6, "#ffffff");
+    blade.addColorStop(0.8, "#c6cfd4");
     blade.addColorStop(1, "#8fa0ab");
     ctx.fillStyle = blade;
     ctx.beginPath();
     ctx.moveTo(7.4, -2.9);
-    ctx.lineTo(29, -2);
-    ctx.lineTo(37, 0);
-    ctx.lineTo(29, 2);
+    ctx.lineTo(33, -1.7);
+    ctx.lineTo(41, 0);
+    ctx.lineTo(33, 1.7);
     ctx.lineTo(7.4, 2.9);
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.9)";
-    ctx.lineWidth = 0.6;
-    ctx.stroke();
-    ctx.strokeStyle = "rgba(112,142,184,0.55)";
-    ctx.lineWidth = 1;
+
+    // Acanaladura central (fuller): sombra fina a lo largo de la hoja.
+    const fuller = ctx.createLinearGradient(7, 0, 41, 0);
+    fuller.addColorStop(0, "rgba(60,70,82,0.45)");
+    fuller.addColorStop(0.5, "rgba(120,134,148,0.25)");
+    fuller.addColorStop(1, "rgba(60,70,82,0.45)");
+    ctx.strokeStyle = fuller;
+    ctx.lineWidth = 0.9;
     ctx.beginPath();
-    ctx.moveTo(10, 0);
-    ctx.lineTo(28, 0);
+    ctx.moveTo(9, 0);
+    ctx.lineTo(32, 0);
     ctx.stroke();
+
+    // Filos brillantes en ambos lados.
+    ctx.strokeStyle = "rgba(255,255,255,0.95)";
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(7.6, -2.7); ctx.lineTo(32.6, -1.55);
+    ctx.moveTo(7.6, 2.7); ctx.lineTo(32.6, 1.55);
+    ctx.stroke();
+    // Punta afilada.
+    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    ctx.beginPath();
+    ctx.moveTo(33, -1.7); ctx.lineTo(41, 0); ctx.lineTo(33, 1.7); ctx.closePath();
+    ctx.fill();
+
     ctx.restore();
   }
 
@@ -2751,41 +2910,81 @@
   // lea como el recorrido de la hoja y no gire con el hombro.
   function drawSlashArc(p) {
     const t = clamp(1 - p.attack / 0.28, 0, 1);
-    if (t < 0.28) return;
-    const k = (t - 0.28) / 0.72;
+    if (t < 0.2) return;
+    const k = (t - 0.2) / 0.8;
     ctx.save();
     ctx.globalCompositeOperation = "screen";
-    ctx.globalAlpha = (1 - k) * 0.85;
     ctx.translate(7, -9);
-    ctx.rotate(-0.8 + k * 1.5);
-    ctx.strokeStyle = "rgba(214,236,255,0.9)";
-    ctx.lineWidth = 2.6;
+    // El arco barre desde atras-arriba hacia adelante-abajo con el tajo.
+    ctx.rotate(-1.0 + k * 2.0);
+    // Estela exterior tenue y ancha.
+    ctx.globalAlpha = (1 - k) * 0.5;
+    ctx.strokeStyle = "rgba(180,210,255,0.7)";
+    ctx.lineWidth = 4.5;
     ctx.beginPath();
-    ctx.arc(0, 0, 23, -0.9, 0.8);
+    ctx.arc(0, 0, 26, -1.1, 0.9);
     ctx.stroke();
-    ctx.strokeStyle = "rgba(255,255,255,0.55)";
+    // Estela media brillante.
+    ctx.globalAlpha = (1 - k) * 0.85;
+    ctx.strokeStyle = "rgba(224,240,255,0.95)";
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.arc(0, 0, 23, -0.95, 0.8);
+    ctx.stroke();
+    // Nucleo blanco fino (el filo).
+    ctx.globalAlpha = (1 - k);
+    ctx.strokeStyle = "rgba(255,255,255,0.98)";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.arc(0, 0, 29, -0.72, 0.62);
+    ctx.arc(0, 0, 29, -0.78, 0.66);
     ctx.stroke();
+    // Chispa en la punta del arco al inicio del tajo.
+    if (k < 0.35) {
+      ctx.globalAlpha = (1 - k / 0.35) * 0.9;
+      ctx.fillStyle = "rgba(255,250,230,1)";
+      const sx = 23 * Math.cos(0.8), sy = 23 * Math.sin(0.8);
+      ctx.beginPath();
+      ctx.arc(sx, sy, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
   }
 
   // --- Cabeza: cráneo, oreja, rostro, lentes y pelo en tres capas ----
+  // --- Cabeza: sprite de alta fidelidad generado por IA -------------
+  // Se dibuja la cabeza real (cara + pelo + lentes) sobre el rig; si
+  // la imagen aun no carga, se cae al dibujo vectorial.
   function drawHead(rig, p) {
     ctx.save();
-    ctx.translate(0.6, SH_Y - 6.5);
+    ctx.translate(0.6, SH_Y - 8.5);
     ctx.rotate(rig.head);
     ctx.scale(0.93, 0.93);
-    const sway = rig.hair;
 
-    // Cuello con sombra.
+    // Cuello: se mantiene vectorial para empalmar con el torso.
+    // Un poco mas largo para subir la cara sobre la hombrera sin hueco.
     ctx.fillStyle = SKIN_DK;
-    roundRect(-2.6, 2, 5.6, 5, 2); ctx.fill();
+    roundRect(-2.6, 2, 5.6, 7, 2); ctx.fill();
     ctx.fillStyle = "rgba(150,96,70,0.3)";
-    ctx.fillRect(-2.6, 5, 5.6, 2);
+    ctx.fillRect(-2.6, 6, 5.6, 2.5);
 
-    // Cráneo: piel con degradado suave (luz de la luna desde la derecha).
+    if (headSprite.complete && headSprite.naturalWidth > 0) {
+      // Sprite de la cabeza: cara + pelo + lentes en alta fidelidad.
+      const w = 34;                       // cabeza pequena y proporcionada
+      const sh = 760, sy = 20;           // recorte vertical (sin bufanda)
+      const h = w * sh / 1024;
+      ctx.translate(0.4, -3.4);
+      // Pequeno cizallamiento horizontal del pelo (rig.hair); ojo: el
+      // componente "d" DEBE ser 1, si es 0 colapsa el eje Y y la cabeza
+      // se aplasta a una linea invisible (bug que hacia que no se viera).
+      ctx.transform(1, 0, rig.hair * 0.10, 1, 0, 0);
+      // La cabeza (pelo 10% .. barbilla 70%) esta ~51% del recorte.
+      ctx.drawImage(headSprite, 0, sy, 1024, sh, -w / 2, -h * 0.51, w, h);
+      ctx.restore();
+      return;
+    }
+
+    // --- Respaldo vectorial si el sprite no ha cargado ---
+    const sway = rig.hair;
     const skin = ctx.createLinearGradient(-6, -10, 7, 4);
     skin.addColorStop(0, lerpColor("#dcb094", SHADOW, 0.12));
     skin.addColorStop(0.5, SKIN);
@@ -2794,34 +2993,26 @@
     ctx.beginPath();
     ctx.ellipse(0.4, -3.4, 8, 9.4, 0.06, 0, Math.PI * 2);
     ctx.fill();
-    // Mejilla y mandíbula en sombra.
     ctx.fillStyle = "rgba(170,108,80,0.22)";
     ctx.beginPath();
     ctx.ellipse(-3.2, -2.4, 5.4, 8.4, 0.06, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = "rgba(150,92,68,0.28)";
     ctx.beginPath();
     ctx.ellipse(-2, 3.6, 4.6, 3, 0, 0, Math.PI * 2); ctx.fill();
-    // Pómuloy luz de mejilla.
     ctx.fillStyle = "rgba(255,236,214,0.5)";
     ctx.beginPath();
     ctx.ellipse(4.6, -2.4, 2.6, 2, 0, 0, Math.PI * 2); ctx.fill();
-
-    // Pelo trasero (nuca).
     ctx.fillStyle = lerpColor(HAIR, SHADOW, 0.25);
     ctx.beginPath();
     ctx.moveTo(-7.4, -6);
     ctx.quadraticCurveTo(-9.4, 1.4, -5.4, 3.4);
     ctx.quadraticCurveTo(-3.4, 0.4, -3.8, -5);
     ctx.closePath(); ctx.fill();
-
-    // Oreja con helix.
     ctx.fillStyle = SKIN_DK;
     ctx.beginPath(); ctx.ellipse(-4, -3.4, 1.7, 2.3, 0, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = "rgba(150,96,70,0.7)"; ctx.lineWidth = 0.5;
     ctx.beginPath(); ctx.arc(-4, -3.4, 0.9, -1, 1.8); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(-4.6, -3.8); ctx.quadraticCurveTo(-4, -2.6, -3.4, -2.6); ctx.stroke();
-
-    // Nariz: puente, lóbulo y fosa.
     ctx.strokeStyle = "rgba(150,92,70,0.7)"; ctx.lineWidth = 0.9;
     ctx.beginPath(); ctx.moveTo(5.2, -5.2); ctx.quadraticCurveTo(7, -4, 7.2, -2.6); ctx.stroke();
     ctx.fillStyle = "rgba(150,92,70,0.3)";
@@ -2830,18 +3021,12 @@
     ctx.beginPath(); ctx.arc(7.6, -2.2, 0.5, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = "rgba(255,236,220,0.6)";
     ctx.beginPath(); ctx.ellipse(7, -3.4, 0.7, 0.5, 0, 0, Math.PI * 2); ctx.fill();
-
-    // Boca: sonrisa cerrada con labio.
     ctx.strokeStyle = "rgba(132,76,54,0.85)"; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(3.4, -0.6); ctx.quadraticCurveTo(5, 0.4, 6.6, -0.4); ctx.stroke();
     ctx.fillStyle = "rgba(196,108,92,0.4)";
     ctx.beginPath(); ctx.moveTo(3.4, -0.6); ctx.quadraticCurveTo(5, 0.2, 6.6, -0.4); ctx.quadraticCurveTo(5, -0.2, 3.4, -0.6); ctx.closePath(); ctx.fill();
-
-    // Ceja con pelo y arco.
     ctx.strokeStyle = lerpColor(HAIR, "#2a1408", 0.4); ctx.lineWidth = 1.4;
     ctx.beginPath(); ctx.moveTo(2.4, -8); ctx.quadraticCurveTo(4.4, -8.6, 6.4, -8.2); ctx.stroke();
-
-    // Ojo: esclera, iris avellana, pupila, prpado y brillo.
     ctx.fillStyle = "rgba(248,240,228,0.95)";
     ctx.beginPath(); ctx.ellipse(4.6, -4.8, 1.5, 1.8, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = "#6e4a2c";
@@ -2850,14 +3035,11 @@
     ctx.beginPath(); ctx.ellipse(5, -4.6, 0.6, 0.9, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = "rgba(255,255,255,0.95)";
     ctx.beginPath(); ctx.arc(4.8, -4.9, 0.4, 0, Math.PI * 2); ctx.fill();
-    // Prpado superior y pestaas.
     ctx.strokeStyle = "#3a241a"; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(3.2, -6); ctx.quadraticCurveTo(4.6, -6.4, 6, -6); ctx.stroke();
     ctx.strokeStyle = "rgba(40,24,16,0.6)"; ctx.lineWidth = 0.5;
     ctx.beginPath(); ctx.moveTo(3.6, -5.6); ctx.lineTo(3.8, -4.4); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(5.2, -5.5); ctx.lineTo(5.4, -4.2); ctx.stroke();
-
-    // Lentes: montura, puente, varilla y reflejo del cristal.
     ctx.fillStyle = "rgba(190,224,255,0.1)";
     roundRect(2, -6.8, 5.8, 4.6, 1.4); ctx.fill();
     ctx.strokeStyle = "rgba(40,48,60,0.92)"; ctx.lineWidth = 0.9;
@@ -2866,8 +3048,6 @@
     ctx.beginPath(); ctx.moveTo(2, -5.9); ctx.lineTo(-2.4, -6.2); ctx.stroke();
     ctx.strokeStyle = "rgba(255,255,255,0.7)"; ctx.lineWidth = 0.6;
     ctx.beginPath(); ctx.moveTo(3, -6.3); ctx.lineTo(5, -6.6); ctx.stroke();
-
-    // Pelo: masa superior con entrada natural y mechones.
     ctx.fillStyle = HAIR;
     ctx.beginPath();
     ctx.moveTo(-7.6, -5.4);
@@ -2879,12 +3059,10 @@
     ctx.lineTo(-2.8, -5);
     ctx.lineTo(-4.8, -9.6);
     ctx.closePath(); ctx.fill();
-    // Brillo del pelo.
     ctx.fillStyle = lerpColor(HAIR_HI, "#3a1a0e", 0.3);
     ctx.beginPath();
     ctx.moveTo(-5.4, -11.4); ctx.quadraticCurveTo(0, -16.4, 6.4, -12.4);
     ctx.quadraticCurveTo(2, -14.4, -2, -13.4); ctx.closePath(); ctx.fill();
-    // Mechones laterales con retardo.
     ctx.fillStyle = HAIR;
     ctx.beginPath();
     ctx.moveTo(-6.2, -12.6);
@@ -2894,7 +3072,6 @@
     ctx.moveTo(6.4, -12.6);
     ctx.quadraticCurveTo(10.4 - sway * 1.8, -11.6, 10 - sway * 2.2, -7.4);
     ctx.quadraticCurveTo(8.4, -9.4, 7, -8); ctx.closePath(); ctx.fill();
-    // Patenas sobre la frente.
     ctx.strokeStyle = HAIR_HI; ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(-5, -12); ctx.quadraticCurveTo(0.2, -16.6, 7.4, -11);
@@ -3008,17 +3185,24 @@
     drawArm(rig.shB, rig.elB, 0.28, () => drawShield(p, -(rig.shB + rig.elB)));
     ctx.restore();
 
+    // Orden de capas pedido: Cabeza (fondo) -> Brazo -> Hombrera (encima).
+    // La cabeza se dibuja antes que el brazo y la hombrera cercanas para
+    // que la hombrera quede por encima del brazo y la cabeza.
     drawHead(rig, p);
 
-    // Hombrera y brazo de la espada, la pieza más cercana.
-    ctx.save();
-    ctx.translate(5.4, SH_Y);
-    drawPauldron(0);
-    ctx.restore();
+    // Brazo de la espada, sobre la cabeza.
     ctx.save();
     ctx.translate(5.4, SH_Y + 0.8);
     drawArm(rig.shF, rig.elF, 0, () => drawSword(p, rig.grip));
     ctx.restore();
+
+    // Hombrera de la espada, la pieza mas cercana: queda encima del brazo
+    // y de la cabeza, como pide el usuario.
+    ctx.save();
+    ctx.translate(5.4, SH_Y);
+    drawPauldron(0);
+    ctx.restore();
+
     if (p.attack > 0) drawSlashArc(p);
 
     if (p.cast > 0) drawCastGlow(p);
