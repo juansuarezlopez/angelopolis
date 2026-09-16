@@ -1,0 +1,8 @@
+# Artefactos temporales del arnés de capturas
+__shot.html
+__shotgame.js
+
+# Ruido de Windows / OneDrive
+Thumbs.db
+desktop.ini
+.DS_Store

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#07060d" />
+  <title>Alas de Plata — Angelópolis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cinzel+Decorative:wght@700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="game" width="960" height="540" aria-label="Juego de plataformas Alas de Plata"></canvas>
+
+    <div id="hud" hidden>
+      <div class="gauges">
+        <div id="hearts" aria-label="Vida"></div>
+        <div id="mana" aria-label="Maná de fe">
+          <span class="mana-sigil">✝</span>
+          <div class="mana-track"><div class="mana-fill" id="mana-fill"></div></div>
+          <span class="mana-value" id="mana-value">100</span>
+        </div>
+      </div>
+      <div id="level-tag">Nivel 1 · Calles de Angelópolis</div>
+    </div>
+
+    <div id="touch" hidden>
+      <div class="cluster left">
+        <button type="button" class="btn move" data-action="left" aria-label="Izquierda">◀</button>
+        <button type="button" class="btn move" data-action="right" aria-label="Derecha">▶</button>
+      </div>
+      <div class="cluster right">
+        <div class="stack">
+          <button type="button" class="btn cross" id="btn-cross" data-action="cross" aria-label="Lanzar cruz y exorcizar">✝<span>exorcizar</span></button>
+          <button type="button" class="btn attack" data-action="attack" aria-label="Atacar">⚔</button>
+        </div>
+        <button type="button" class="btn jump" data-action="jump" aria-label="Saltar">▲<span>salto</span></button>
+      </div>
+    </div>
+
+    <div id="overlay" class="overlay">
+      <div class="panel" id="panel-start">
+        <img class="keyart" src="assets/angelopolis-keyart.png" alt="Joven paladín de armadura plateada con escudo de cruz en las calles de Angelópolis" />
+        <p class="kicker">Un paladín despierta</p>
+        <h1>Alas de Plata</h1>
+        <p class="subtitle">Nivel 1 · Calles de Angelópolis</p>
+        <p class="story">
+          Los demonios entraron por la catedral y se derramaron sobre Angelópolis.
+          Un chico de dieciséis años, cabello castaño, lentes, armadura plateada
+          y capa azul toma el escudo de la cruz y sale a las calles empedradas.
+          Al fondo espera
+          <strong>Vorath, el Umbral</strong>.
+        </p>
+        <ul class="hints">
+          <li>Izquierda: moverse por la calle</li>
+          <li>Derecha: exorcizar, cortar y saltar</li>
+          <li>En el aire, pulsa salto otra vez para desplegar las alas</li>
+          <li>Toca dos veces la misma dirección para derrapar y colarte bajo el demonio</li>
+          <li>⚔ la espada hiere el doble que la cruz: úsala de cerca</li>
+          <li>✝ la cruz sale hacia donde mires y busca al demonio más cercano de ese lado</li>
+          <li>Cada cruz gasta maná: la barra azul se recarga sola</li>
+        </ul>
+        <button type="button" class="cta" id="btn-start">Empezar</button>
+        <p class="fine">Teclado: A/D o flechas (doble toque = derrape) · Espacio salto · J espada · K cruz</p>
+      </div>
+
+      <div class="panel" id="panel-dead" hidden>
+        <h2>Caíste</h2>
+        <p class="story">Las campanas callan y la calle reclama otra alma. Levántate, paladín.</p>
+        <button type="button" class="cta" id="btn-retry">Reintentar</button>
+      </div>
+
+      <div class="panel" id="panel-win" hidden>
+        <p class="kicker">Catedral purificada</p>
+        <h2>Vorath ha caído</h2>
+        <p class="story">
+          La cruz selló el umbral y Angelópolis vuelve a respirar. Las alas se
+          pliegan… pero otros barrios aún gritan.
+        </p>
+        <p class="score" id="win-stats"></p>
+        <button type="button" class="cta" id="btn-again">Jugar de nuevo</button>
+      </div>
+    </div>
+  </div>
+  <script src="js/game.js"></script>
+</body>
+</html>
