@@ -30,8 +30,13 @@
 
     <div id="touch" hidden>
       <div class="cluster left">
-        <button type="button" class="btn move" data-action="left" aria-label="Izquierda">◀</button>
-        <button type="button" class="btn move" data-action="right" aria-label="Derecha">▶</button>
+        <div class="stack">
+          <button type="button" class="btn jump" data-action="jump" aria-label="Saltar">▲<span>salto</span></button>
+          <div class="row">
+            <button type="button" class="btn move" data-action="left" aria-label="Izquierda">◀</button>
+            <button type="button" class="btn move" data-action="right" aria-label="Derecha">▶</button>
+          </div>
+        </div>
       </div>
       <div class="cluster right">
         <div class="stack">

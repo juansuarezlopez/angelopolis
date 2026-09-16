@@ -167,6 +167,27 @@ html, body {
   align-items: center;
 }
 
+.row {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  align-items: center;
+}
+
+/* Botones de mover: mas grandes para que sean faciles de pulsar en movil. */
+.btn.move {
+  width: 88px;
+  height: 88px;
+  font-size: 34px;
+}
+
+/* Salto del lado izquierdo: un poco menor que el principal para no estorbar. */
+.cluster.left .btn.jump {
+  width: 80px;
+  height: 80px;
+  font-size: 28px;
+}
+
 .btn {
   pointer-events: auto;
   width: 76px;
@@ -407,9 +428,12 @@ h2 { font-size: clamp(24px, 5vw, 36px); }
   .story, .hints, .fine, .keyart { display: none; }
   .panel { padding: 16px 18px; }
   .btn { width: 60px; height: 60px; }
+  .btn.move { width: 72px; height: 72px; font-size: 28px; }
   .btn.attack, .btn.cross { width: 58px; height: 58px; }
   .btn.jump { width: 74px; height: 74px; }
+  .cluster.left .btn.jump { width: 64px; height: 64px; }
   .stack { gap: 8px; }
+  .row { gap: 10px; }
 }
 
 @media (min-width: 900px) {
