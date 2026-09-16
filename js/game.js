@@ -1959,54 +1959,103 @@
     return cur + (target - cur) * Math.min(1, rate * dt);
   }
 
-  // Placa de acero: degradado frío, filo iluminado y base en sombra.
+  // Sombreado de materiales de alta fidelidad. La luz principal viene de
+  // arriba-izquierda (la luna), así cada pieza lleva un reflejo especular
+  // cerca de ese borde, un núcleo en sombra y oclusión en la base.
   // dim oscurece la pieza para las que quedan del lado lejano del cuerpo.
   function steelFill(path, x0, y0, x1, y1, dim) {
     const d = dim || 0;
-    const g = ctx.createLinearGradient(x0, y0, x1, y1);
-    g.addColorStop(0, lerpColor("#f6faf8", SHADOW, d));
-    g.addColorStop(0.36, lerpColor("#d2dadd", SHADOW, d));
-    g.addColorStop(0.7, lerpColor("#98a3ab", SHADOW, d));
-    g.addColorStop(1, lerpColor("#5b6570", SHADOW, d));
-    // Contorno oscuro primero: separa cada pieza de la vecina para que la
-    // armadura no se lea como una sola mancha clara.
+    // Contorno oscuro: separa cada placa de la vecina.
     path();
-    ctx.strokeStyle = "rgba(24,30,42,0.6)";
+    ctx.strokeStyle = "rgba(18,24,36,0.7)";
     ctx.lineWidth = 1.5;
     ctx.stroke();
+    // Base metálica de 5 paradas: borde iluminado, núcleo y oclusión.
+    const g = ctx.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0, lerpColor("#fbffff", SHADOW, d));
+    g.addColorStop(0.16, lerpColor("#e6edef", SHADOW, d));
+    g.addColorStop(0.46, lerpColor("#c2ccd4", SHADOW, d));
+    g.addColorStop(0.74, lerpColor("#828d97", SHADOW, d));
+    g.addColorStop(1, lerpColor("#3e4853", SHADOW, d));
     ctx.fillStyle = g;
     ctx.fill();
-    ctx.strokeStyle = `rgba(248,252,250,${0.8 - d * 0.5})`;
+    // Reflejo especular de la luna sobre la placa (recortado a la pieza).
+    ctx.save();
+    path();
+    ctx.clip();
+    const sx = x0 + (x1 - x0) * 0.26;
+    const sy = y0 + (y1 - y0) * 0.2;
+    const rad = Math.max(x1 - x0, y1 - y0) * 0.6;
+    const spec = ctx.createRadialGradient(sx, sy, 0.4, sx, sy, rad);
+    spec.addColorStop(0, `rgba(255,255,255,${0.55 - d * 0.32})`);
+    spec.addColorStop(0.45, `rgba(255,255,255,${0.14 - d * 0.08})`);
+    spec.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = spec;
+    ctx.fillRect(x0 - 3, y0 - 3, (x1 - x0) + 6, (y1 - y0) + 6);
+    ctx.restore();
+    // Filo iluminado.
+    path();
+    ctx.strokeStyle = `rgba(250,254,252,${0.9 - d * 0.5})`;
     ctx.lineWidth = 0.55;
     ctx.stroke();
   }
 
   function clothFill(path, x0, y0, x1, y1, dim) {
     const d = dim || 0;
-    const g = ctx.createLinearGradient(x0, y0, x1, y1);
-    g.addColorStop(0, lerpColor(CLOTH_HI, SHADOW, d));
-    g.addColorStop(0.55, lerpColor(CLOTH, SHADOW, d));
-    g.addColorStop(1, lerpColor(CLOTH_DK, SHADOW, d));
     path();
-    ctx.strokeStyle = "rgba(12,16,28,0.55)";
+    ctx.strokeStyle = "rgba(10,14,24,0.6)";
     ctx.lineWidth = 1.3;
     ctx.stroke();
+    // Tela con pliegues: degradado más profundo y doble sombra.
+    const g = ctx.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0, lerpColor(CLOTH_HI, SHADOW, d));
+    g.addColorStop(0.4, lerpColor(CLOTH, SHADOW, d));
+    g.addColorStop(0.75, lerpColor(CLOTH_DK, SHADOW, d));
+    g.addColorStop(1, lerpColor("#101630", SHADOW, d));
     ctx.fillStyle = g;
     ctx.fill();
+    // Trama de tela: líneas tenues alternadas.
+    ctx.save();
+    path();
+    ctx.clip();
+    ctx.strokeStyle = `rgba(255,255,255,${0.05 - d * 0.03})`;
+    ctx.lineWidth = 0.4;
+    for (let ty = y0 + 2; ty < y1 - 1; ty += 3) {
+      ctx.beginPath(); ctx.moveTo(x0, ty); ctx.lineTo(x1, ty); ctx.stroke();
+    }
+    ctx.restore();
   }
 
   function leatherFill(path, x0, y0, x1, y1, dim) {
     const d = dim || 0;
-    const g = ctx.createLinearGradient(x0, y0, x1, y1);
-    g.addColorStop(0, lerpColor(LEATHER_HI, SHADOW, d));
-    g.addColorStop(0.6, lerpColor(LEATHER, SHADOW, d));
-    g.addColorStop(1, lerpColor(LEATHER_DK, SHADOW, d));
     path();
-    ctx.strokeStyle = "rgba(20,12,8,0.6)";
+    ctx.strokeStyle = "rgba(18,10,6,0.65)";
     ctx.lineWidth = 1.3;
     ctx.stroke();
+    const g = ctx.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0, lerpColor(LEATHER_HI, SHADOW, d));
+    g.addColorStop(0.55, lerpColor(LEATHER, SHADOW, d));
+    g.addColorStop(1, lerpColor(LEATHER_DK, SHADOW, d));
     ctx.fillStyle = g;
     ctx.fill();
+    // Grano del cuero y brillo satinado.
+    ctx.save();
+    path();
+    ctx.clip();
+    ctx.fillStyle = `rgba(40,22,12,${0.25 + d * 0.15})`;
+    for (let gy = y0 + 2; gy < y1 - 1; gy += 2.4) {
+      for (let gx = x0 + 2; gx < x1 - 1; gx += 2.4) {
+        if (((gx + gy) | 0) % 3 === 0) {
+          ctx.beginPath(); ctx.arc(gx, gy, 0.45, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    }
+    const sat = ctx.createLinearGradient(x0, y0, x1, y1);
+    sat.addColorStop(0, `rgba(255,236,200,${0.18 - d * 0.1})`);
+    sat.addColorStop(0.5, "rgba(255,236,200,0)");
+    ctx.fillStyle = sat;
+    ctx.fillRect(x0, y0, x1 - x0, (y1 - y0) * 0.5);
+    ctx.restore();
   }
 
   function rivets(points, r, dim) {
