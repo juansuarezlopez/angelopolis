@@ -86,17 +86,17 @@
   // box = [sx, sy, sw, sh] del contenido dentro del PNG de 1024.
   // ax/ay = punto de anclaje (0..1) que se pega a la articulación.
   const PARTS = {
-    coraza:    { file:"parte-coraza.png",    box:[286,94,449,810],  h:29,   ax:.50, ay:.66, flip:true },
+    coraza:    { file:"parte-coraza-v2.png", box:[272,92,486,833],  h:30,   ax:.50, ay:.68 },
     brazo:     { file:"parte-brazo.png",     box:[320,74,323,873],  h:13.5, ax:.50, ay:.06 },
     antebrazo: { file:"parte-antebrazo.png", box:[379,44,261,937],  h:16.5, ax:.50, ay:.08 },
-    muslo:     { file:"parte-muslo.png",     box:[358,48,324,924],  h:17.5, ax:.50, ay:.05, flip:true },
-    greba:     { file:"parte-greba.png",     box:[358,78,371,640],  h:15.5, ax:.45, ay:.10 },
-    bota:      { file:"parte-greba.png",     box:[358,700,371,225], h:6.5,  ax:.36, ay:.06 },
+    muslo:     { file:"parte-muslo.png",     box:[358,48,324,924],  h:17.5, ax:.50, ay:.05, flip:true, scaleX:1.42 },
+    greba:     { file:"parte-greba.png",     box:[358,78,371,640],  h:15.5, ax:.45, ay:.10, scaleX:1.22 },
+    bota:      { file:"parte-greba.png",     box:[358,700,371,225], h:6.5,  ax:.36, ay:.06, scaleX:1.08 },
     escudo:    { file:"parte-escudo.png",    box:[188,45,646,898],  h:23,   ax:.50, ay:.50 },
     espada:    { file:"parte-espada.png",    box:[19,366,985,246],  w:40,   ax:.18, ay:.50 },
     ala:       { file:"parte-ala.png",       box:[34,100,950,812],  w:46,   ax:.93, ay:.72 },
     cabeza:    { file:"parte-cabeza.png",    box:[0,20,1024,760],   w:22,   ax:.50, ay:.51 },
-    hombrera:  { file:"parte-hombrera.png",  box:null,              w:10,   ax:.50, ay:.62 },
+    hombrera:  { file:"parte-hombrera-v2.png", box:[254,247,513,479], w:10, ax:.56, ay:.54 },
   };
 
   let pending = 0, failed = [];
@@ -120,7 +120,8 @@
     if (!im || !im.complete || !im.naturalWidth) return;
     const box = p.box || [0, 0, im.naturalWidth, im.naturalHeight];
     const [sx, sy, sw, sh] = box;
-    const dw = p.w != null ? p.w : p.h * sw / sh;
+    const naturalW = p.w != null ? p.w : p.h * sw / sh;
+    const dw = naturalW * (p.scaleX || 1);
     const dh = p.h != null ? p.h : p.w * sh / sw;
     const dx = -p.ax * dw, dy = -p.ay * dh;
     ctx.save();
@@ -351,9 +352,9 @@
 
     ctx.save(); ctx.translate(0, torsoY); ctx.rotate(rig.lean);
 
-    // Hombro lejano y su brazo con el escudo.
+    // Brazo del escudo: queda DETRAS del torso. La hombrera y toda la
+    // cadena hombro-codo-mano se dibujan primero; la coraza los solapa.
     ctx.save(); ctx.translate(-4.6, SH_Y); part("hombrera", .34); ctx.restore();
-    part("coraza", 0);
     ctx.save(); ctx.translate(-4.6, SH_Y + .6);
     arm(rig.shB, rig.elB, .3, () => {
       ctx.save();
@@ -365,7 +366,10 @@
     });
     ctx.restore();
 
-    // Cabeza, luego brazo cercano, luego hombrera encima.
+    // Torso por delante del brazo del escudo.
+    part("coraza", 0);
+
+    // Cabeza, luego brazo DE LA ESPADA al frente, y hombrera encima.
     ctx.save();
     ctx.translate(.6, SH_Y - 13); ctx.rotate(rig.head);
     ctx.fillStyle = "#d79c76";                    // cuello vectorial
