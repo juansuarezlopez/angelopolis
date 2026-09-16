@@ -87,6 +87,68 @@
   const manaValueEl = document.getElementById("mana-value");
   const crossBtnEl = document.getElementById("btn-cross");
 
+  // --- Intro cinematográfica: texto en cursiva que se escribe solo ---
+  const introEl = document.getElementById("intro");
+  const introTextEl = document.getElementById("intro-text");
+  const introBtn = document.getElementById("btn-intro-continue");
+  const INTRO_STORY =
+    "Esta es la historia de una aventura.\n\n" +
+    "Nacido entre la aspereza de las montañas sagradas, un chico creció en la " +
+    "humildad, sin saber que albergaba en su pecho unas aspiraciones inmensas.\n\n" +
+    "Nunca imaginó lo que Dios guardaba para su futuro: un paladín, guerrero " +
+    "de la luz, destinado a destripar el mal que ya se avecinaba sobre Angelópolis.";
+  let introTimers = [];
+  function clearIntroTimers() {
+    introTimers.forEach((t) => clearTimeout(t));
+    introTimers = [];
+  }
+  function playIntro() {
+    if (!introEl || introEl.hidden) return;
+    introTextEl.textContent = "";
+    introTextEl.classList.remove("done");
+    introBtn.hidden = true;
+    let i = 0;
+    const step = () => {
+      if (i >= INTRO_STORY.length) {
+        introTextEl.classList.add("done");
+        introBtn.hidden = false;
+        return;
+      }
+      // Avanza 1-2 caracteres por tick; las pausas naturales al puntuar.
+      const ch = INTRO_STORY[i];
+      introTextEl.textContent += ch;
+      i++;
+      let delay = 34;
+      if (ch === "\n") delay = 360;
+      else if (".,".includes(ch)) delay = 180;
+      else if (ch === ":") delay = 260;
+      introTimers.push(setTimeout(step, delay));
+    };
+    introTimers.push(setTimeout(step, 600));
+  }
+  if (introEl && !introEl.hidden) {
+    // Arranca la maquina de escribir al cargar.
+    introTimers.push(setTimeout(playIntro, 400));
+  }
+  if (introBtn) {
+    introBtn.addEventListener("click", () => {
+      clearIntroTimers();
+      introEl.hidden = true;
+    });
+    // Permite saltar el intro con Enter/Espacio tocando la pantalla.
+    const skipIntro = (ev) => {
+      if (introEl.hidden) return;
+      if (ev.type === "keydown" && !(ev.key === "Enter" || ev.key === " ")) return;
+      ev.preventDefault();
+      clearIntroTimers();
+      introTextEl.textContent = INTRO_STORY;
+      introTextEl.classList.add("done");
+      introBtn.hidden = false;
+    };
+    window.addEventListener("keydown", skipIntro);
+    introEl.addEventListener("pointerdown", skipIntro);
+  }
+
   const CROSS_COST = 22;
   const MANA_REGEN = 10.5;
   const CROSS_RANGE = 620;
@@ -3896,6 +3958,9 @@
   window.addEventListener("keydown", (e) => {
     keys[e.key] = true;
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key)) e.preventDefault();
+    // Mientras la intro este visible no arrancamos el juego con teclado:
+    // el handler de skipIntro revela el boton Continuar.
+    if (introEl && !introEl.hidden) return;
     if (state !== "play") {
       if ((e.key === "Enter" || e.key === " ") && (state === "menu" || state === "dead" || state === "win")) {
         e.preventDefault();
