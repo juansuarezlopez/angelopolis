@@ -2006,35 +2006,48 @@
     const d = dim || 0;
     // Contorno oscuro: separa cada placa de la vecina.
     path();
-    ctx.strokeStyle = "rgba(18,24,36,0.7)";
+    ctx.strokeStyle = "rgba(14,18,28,0.78)";
     ctx.lineWidth = 1.5;
     ctx.stroke();
-    // Base metálica de 5 paradas: borde iluminado, núcleo y oclusión.
+    // Base metalica de 5 paradas: borde iluminado, nucleo y oclusion.
     const g = ctx.createLinearGradient(x0, y0, x1, y1);
     g.addColorStop(0, lerpColor("#fbffff", SHADOW, d));
-    g.addColorStop(0.16, lerpColor("#e6edef", SHADOW, d));
-    g.addColorStop(0.46, lerpColor("#c2ccd4", SHADOW, d));
-    g.addColorStop(0.74, lerpColor("#828d97", SHADOW, d));
-    g.addColorStop(1, lerpColor("#3e4853", SHADOW, d));
+    g.addColorStop(0.14, lerpColor("#e8eef0", SHADOW, d));
+    g.addColorStop(0.42, lerpColor("#c4ced5", SHADOW, d));
+    g.addColorStop(0.72, lerpColor("#7e8a94", SHADOW, d));
+    g.addColorStop(1, lerpColor("#3a424e", SHADOW, d));
     ctx.fillStyle = g;
     ctx.fill();
-    // Reflejo especular de la luna sobre la placa (recortado a la pieza).
     ctx.save();
     path();
     ctx.clip();
-    const sx = x0 + (x1 - x0) * 0.26;
-    const sy = y0 + (y1 - y0) * 0.2;
-    const rad = Math.max(x1 - x0, y1 - y0) * 0.6;
-    const spec = ctx.createRadialGradient(sx, sy, 0.4, sx, sy, rad);
-    spec.addColorStop(0, `rgba(255,255,255,${0.55 - d * 0.32})`);
-    spec.addColorStop(0.45, `rgba(255,255,255,${0.14 - d * 0.08})`);
+    // Reflejo especular de la luna: mas nitido y concentrado (look metalico).
+    const sx = x0 + (x1 - x0) * 0.24;
+    const sy = y0 + (y1 - y0) * 0.18;
+    const rad = Math.max(x1 - x0, y1 - y0) * 0.55;
+    const spec = ctx.createRadialGradient(sx, sy, 0.3, sx, sy, rad);
+    spec.addColorStop(0, `rgba(255,255,255,${0.7 - d * 0.38})`);
+    spec.addColorStop(0.3, `rgba(255,255,255,${0.22 - d * 0.12})`);
     spec.addColorStop(1, "rgba(255,255,255,0)");
     ctx.fillStyle = spec;
     ctx.fillRect(x0 - 3, y0 - 3, (x1 - x0) + 6, (y1 - y0) + 6);
+    // Luz de borde (rim light) fria en el lado opuesto al especular:
+    // da la sensacion de metal pulido reflejando el cielo nocturno.
+    const rx = x1 - (x1 - x0) * 0.12;
+    const ry = y1 - (y1 - y0) * 0.14;
+    const rim = ctx.createRadialGradient(rx, ry, 0.3, rx, ry, rad * 0.9);
+    rim.addColorStop(0, `rgba(150,180,220,${0.32 - d * 0.2})`);
+    rim.addColorStop(0.5, `rgba(150,180,220,${0.1 - d * 0.06})`);
+    rim.addColorStop(1, "rgba(150,180,220,0)");
+    ctx.fillStyle = rim;
+    ctx.fillRect(x0 - 3, y0 - 3, (x1 - x0) + 6, (y1 - y0) + 6);
+    // Oclusion en las uniones (sombra de contacto entre placas).
+    ctx.fillStyle = `rgba(10,14,22,${0.28 - d * 0.12})`;
+    ctx.fillRect(x0, y1 - 1.4, x1 - x0, 1.6);
     ctx.restore();
     // Filo iluminado.
     path();
-    ctx.strokeStyle = `rgba(250,254,252,${0.9 - d * 0.5})`;
+    ctx.strokeStyle = `rgba(250,254,252,${0.92 - d * 0.5})`;
     ctx.lineWidth = 0.55;
     ctx.stroke();
   }
@@ -2495,14 +2508,17 @@
 
     const tip = pts[pts.length - 1];
     const g = ctx.createLinearGradient(ax, ay, tip.x, tip.y);
-    g.addColorStop(0, "#5877e8");
-    g.addColorStop(0.45, "#2a44a6");
-    g.addColorStop(1, "#111a46");
+    // Tela satada: degradado con mas paradas para un look de seda/terciopelo.
+    g.addColorStop(0, "#6a8af0");
+    g.addColorStop(0.25, "#3e5cc6");
+    g.addColorStop(0.55, "#2646a6");
+    g.addColorStop(0.8, "#162a6e");
+    g.addColorStop(1, "#0c1640");
     ctx.fillStyle = g;
     outline();
     ctx.fill();
-    // Pliegues internos siguiendo la cadena.
-    ctx.strokeStyle = "rgba(150,180,255,0.3)";
+    // Pliegues internos siguiendo la cadena, con sombra mas profunda.
+    ctx.strokeStyle = "rgba(120,150,230,0.32)";
     ctx.lineWidth = 0.8;
     for (const off of [-0.3, 0.15]) {
       ctx.beginPath();
@@ -2515,12 +2531,31 @@
       }
       ctx.stroke();
     }
+    // Brillo saten a lo largo del pliegue central (luz de luna).
+    ctx.strokeStyle = "rgba(200,222,255,0.4)";
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const w = 0;
+      const x = pts[i].x + Math.cos(pts[i].ang) * w;
+      const y = pts[i].y + Math.sin(pts[i].ang) * w;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
     // Filo iluminado del borde exterior.
     ctx.strokeStyle = "rgba(190,214,255,0.5)";
     ctx.lineWidth = 0.9;
     ctx.beginPath();
     ctx.moveTo(left[0][0], left[0][1]);
     for (let i = 1; i < left.length; i++) ctx.lineTo(left[i][0], left[i][1]);
+    ctx.stroke();
+    // Sombra de oclusion en el borde interior (donde se une al cuello).
+    ctx.strokeStyle = "rgba(8,12,30,0.5)";
+    ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(right[0][0], right[0][1]);
+    for (let i = 1; i < right.length; i++) ctx.lineTo(right[i][0], right[i][1]);
     ctx.stroke();
   }
 
