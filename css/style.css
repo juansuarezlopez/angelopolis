@@ -244,6 +244,24 @@ html, body {
   box-shadow: none;
 }
 
+.btn.prayer {
+  width: 70px;
+  height: 70px;
+  font-size: 24px;
+  color: #eaf2ff;
+  border-color: rgba(220, 232, 255, 0.8);
+  background: radial-gradient(circle at 35% 30%, rgba(190, 210, 255, 0.35), rgba(20, 24, 40, 0.8));
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45), 0 0 18px rgba(190, 210, 255, 0.25);
+}
+.btn.prayer span {
+  display: block;
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-top: -4px;
+  color: #d8e2f5;
+}
+
 .btn.cross span {
   display: block;
   font-size: 8px;

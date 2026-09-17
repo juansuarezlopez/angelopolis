@@ -31,6 +31,95 @@
   setTimeout(markPauldronReady, 0);
   window.__pauldronSprite = pauldronSprite;
 
+  // ------------------------------------------------------------------
+  // Modelo del caballero por piezas (sprites de IA sobre el rig vectorial).
+  // Cada pieza se ancla en su propia articulación: ax/ay son la posición del
+  // ancla dentro de la imagen (0..1) y w/h el tamaño en unidades del héroe.
+  // Los PNG de assets/knight/ ya vienen recortados a su caja útil, así que
+  // no hace falta declarar recortes. Si alguno no carga, drawPlayer cae al
+  // dibujo vectorial de siempre.
+  // Los valores de ax/ay/w/h/scaleX/scaleY/rot/flip y las posiciones de
+  // KNIGHT_JOINTS salen del editor interactivo (preview/esqueleto.html ->
+  // "guardar ajustes" -> preview/rig-ajustado.json). Para traer una nueva
+  // tanda de ajustes basta con copiar los números de ese JSON aquí.
+  const KNIGHT_PARTS = {
+    coraza:         { file: "coraza.png",          h: 21,   ax: .50, ay: .62 },
+    brazo:          { file: "brazo.png",           h: 13.5, ax: .50, ay: .06, scaleX: 1.5, scaleY: 1 },
+    antebrazo:      { file: "antebrazo.png",       h: 16.5, ax: .70, ay: -.10 },
+    // El lado lejano reutiliza el brazo cercano volteado, para que se lea
+    // como el brazo opuesto.
+    brazoLejos:     { file: "brazo.png",           h: 13.5, ax: .50, ay: .06, scaleX: 1, scaleY: 1, flip: true },
+    antebrazoLejos: { file: "antebrazo-lejos.png", h: 12.5, ax: .50, ay: .08, scaleX: .5 },
+    escudo:         { file: "escudo.png",          h: 23,   ax: .50, ay: .50, rot: 0.3141592653589793 },
+    espada:         { file: "espada.png",          w: 40,   ax: .18, ay: .50, rot: 4.71238898038469 },
+    cabeza:         { file: "cabeza.png",          w: 24,   ax: .50, ay: .55, scaleX: .8, scaleY: .8 },
+    hombreraCerca:  { file: "hombrera-cerca.png",  w: 11,   ax: .50, ay: .30 },
+    hombreraLejos:  { file: "hombrera-lejos.png",  w: 8.5,  ax: .50, ay: .30 },
+    capa:           { file: "capa.png",            h: 26,   ax: .79, ay: .06 },
+    musloCerca:     { file: "muslo-cerca.png",     h: 15,   ax: .50, ay: .04 },
+    grebaCerca:     { file: "greba-cerca.png",     h: 12.5, ax: .50, ay: .05 },
+    botaCerca:      { file: "bota-cerca.png",      h: 6.5,  ax: .50, ay: .06 },
+    musloLejos:     { file: "muslo-lejos.png",     h: 15,   ax: .50, ay: .04 },
+    grebaLejos:     { file: "greba-lejos.png",     h: 12.5, ax: .50, ay: .05 },
+    botaLejos:      { file: "bota-lejos.png",      h: 6.5,  ax: .50, ay: .06 },
+  };
+
+  // Posición de cada articulación. hipF/hipB van en el espacio de la pelvis;
+  // el resto en el del torso. shield y sword son el ajuste del arma dentro
+  // de la mano correspondiente.
+  const KNIGHT_JOINTS = {
+    hipB:      { x: -2.4,   y: 0 },
+    hipF:      { x: 2.8,    y: 0 },
+    pauldronB: { x: 2.023,  y: -11.341 },
+    shoulderB: { x: 2.39,   y: -10.207 },
+    coraza:    { x: 0,      y: 0 },
+    head:      { x: 0.462,  y: -21.596 },
+    cape:      { x: -6.697, y: -12.793 },
+    shoulderF: { x: -4.196, y: -8.483 },
+    pauldronF: { x: -2.937, y: -13.77 },
+    shield:    { x: 3.678,  y: 0.516 },
+    sword:     { x: 0.09,   y: 6.857 },
+  };
+
+  // Cuenta cuántas piezas están listas. El modelo por sprites solo entra en
+  // juego cuando TODAS cargaron, para no mezclar mitad sprite mitad vector.
+  let knightLoaded = 0;
+  let knightTotal = 0;
+  const knightImgs = {};
+  for (const k in KNIGHT_PARTS) {
+    const f = KNIGHT_PARTS[k].file;
+    if (knightImgs[f]) continue;
+    knightTotal++;
+    const im = new Image();
+    im.onload = () => { knightLoaded++; };
+    im.onerror = () => { knightTotal--; };   // no bloquea: quedará en vector
+    im.src = "assets/knight/" + f;
+    knightImgs[f] = im;
+  }
+  const knightReady = () => knightTotal > 0 && knightLoaded >= knightTotal;
+
+  // Caché de sprites pre-oscurecidos. Aplicar `ctx.filter` cada frame
+  // para las piezas lejanas es carísimo (los filtros de canvas son lentos,
+  // sobre todo en móvil). En su lugar, cada sprite se oscurece UNA vez al
+  // cargar y se guarda en un canvas fuera de pantalla; luego se dibuja
+  // ese canvas sin filtro. Es ~10x más rápido.
+  const dimCache = {};
+  function dimCanvas(im) {
+    const c = document.createElement("canvas");
+    c.width = im.naturalWidth; c.height = im.naturalHeight;
+    const cx = c.getContext("2d");
+    cx.filter = "brightness(0.847) saturate(0.881)";
+    cx.drawImage(im, 0, 0);
+    cx.filter = "none";
+    return c;
+  }
+  function dimImg(im) {
+    if (!im || !im.complete || !im.naturalWidth) return null;
+    if (dimCache[im.src]) return dimCache[im.src];
+    const c = dimCanvas(im);
+    dimCache[im.src] = c;
+    return c;
+  }
 
   // El lienzo lógico mide 960x540, pero el búfer se dibuja a la densidad real
   // de la pantalla para que el detalle vectorial no se pierda al estirarlo.
@@ -150,17 +239,22 @@
   }
 
   const CROSS_COST = 22;
-  const MANA_REGEN = 10.5;
+  // La regeneración natural de maná es CERO: el chico tiene que rezar
+  // (botón "oración") para recuperarlo. Mientras reza aparece la Virgen,
+  // el caballero se arrodilla y el maná sube a PRAYER_REGEN.
+  const MANA_REGEN = 0;
+  const PRAYER_REGEN = 60;
+  const PRAYER_TIME = 1.1;          // duración de la aparición de la Virgen
   const CROSS_RANGE = 620;
   const PLAYER_H = 38;
   const SLIDE_H = 21;
-  const SWORD_DMG = 2;
+  const SWORD_DMG = 3;
   const CROSS_DMG = 1;
   const winStatsEl = document.getElementById("win-stats");
   const touchEl = document.getElementById("touch");
 
   const keys = Object.create(null);
-  const held = { left: false, right: false, jump: false, attack: false, cross: false };
+  const held = { left: false, right: false, jump: false, attack: false, cross: false, prayer: false };
   const edge = { jump: false, attack: false, cross: false };
 
   let audioCtx = null;
@@ -250,9 +344,20 @@
       { x: 2800, y: 350, w: 110, h: 20, kind: "roof" },
       { x: 2960, y: 270, w: 160, h: 22, kind: "roof" },
       { x: 3180, y: 500, w: 260, h: 74, kind: "street" },
+      // Nueva sección de plataformeo antes del jefe: una subida
+      // de tejados y balcones que obliga a saltar entre plataformas
+      // mientras se enfrentan más demonios.
       { x: 3480, y: 430, w: 120, h: 22, kind: "balcony" },
-      { x: 3640, y: 500, w: 860, h: 74, kind: "atrium" },
-      { x: 4460, y: 80, w: 40, h: 420, kind: "wall" },
+      { x: 3660, y: 360, w: 100, h: 20, kind: "roof" },
+      { x: 3820, y: 290, w: 110, h: 20, kind: "roof" },
+      { x: 3980, y: 220, w: 130, h: 22, kind: "roof" },
+      // El arena del jefe es el interior de la catedral: un suelo
+      // continuo de altar (atrium) que ocupa toda la nave, más dos
+      // repisas altas (coro) para el plataformeo vertical.
+      { x: 4150, y: 340, w: 100, h: 20, kind: "balcony" },
+      { x: 4820, y: 340, w: 100, h: 20, kind: "balcony" },
+      { x: 4100, y: 500, w: 860, h: 74, kind: "atrium" },
+      { x: 4960, y: 80, w: 40, h: 420, kind: "wall" },
     ];
 
     const spikes = [
@@ -275,12 +380,20 @@
       { type: "flyer", x: 2780, y: 180 },
       { type: "imp", x: 3240, y: 466 },
       { type: "flyer", x: 3380, y: 260 },
+      // Enemigos de la nueva sección de plataformeo.
+      { type: "imp", x: 3520, y: 396 },
+      { type: "flyer", x: 3700, y: 230 },
+      { type: "imp", x: 3860, y: 266 },
+      { type: "flyer", x: 4020, y: 160 },
+      { type: "imp", x: 4200, y: 266 },
+      { type: "flyer", x: 4360, y: 350 },
     ];
 
     const pickups = [
       { x: 1218, y: 322, kind: "heart" },
       { x: 2030, y: 212, kind: "heart" },
       { x: 3010, y: 232, kind: "heart" },
+      { x: 4030, y: 190, kind: "heart" },
     ];
 
     const signs = [
@@ -289,7 +402,8 @@
       { x: 1640, y: 360, text: "Las alas nacen en el segundo salto" },
       { x: 2180, y: 430, text: "✝  lanza cruces y exorciza a distancia" },
       { x: 3240, y: 430, text: "⚔  el acero para los que se acercan" },
-      { x: 3760, y: 430, text: "La catedral está profanada" },
+      { x: 3540, y: 360, text: "Sube los tejados antes de la catedral" },
+      { x: 4580, y: 430, text: "La catedral está profanada" },
     ];
 
     const props = [
@@ -304,10 +418,11 @@
       { type: "lantern", x: 3410, y: 500 },
       { type: "lantern", x: 3860, y: 500 },
       { type: "stonecross", x: 4380, y: 500 },
+      { type: "lantern", x: 4780, y: 500 },
     ];
 
     return {
-      width: 4500,
+      width: 5000,
       height: H,
       spawn: { x: 70, y: 462 },
       platforms,
@@ -316,7 +431,7 @@
       pickupBlueprints: pickups,
       signs,
       props,
-      arenaX: 3680,
+      arenaX: 4100,
     };
   }
 
@@ -376,7 +491,7 @@
     return {
       type: "boss",
       name: "Vorath, el Umbral",
-      x: 4100,
+      x: 4700,
       y: 300,
       w: 78,
       h: 110,
@@ -426,6 +541,7 @@
       crossCd: 0,
       cast: 0,
       shield: 0,
+      prayer: 0,           // >0 mientras reza; muestra a la Virgen y sube el maná
       dash: 0,
       dashCd: 0,
       dashDir: 1,
@@ -812,7 +928,9 @@
     if (p.crossCd > 0) p.crossCd -= dt;
     if (p.cast > 0) p.cast -= dt;
     if (p.mana < p.maxMana && !p.dead) {
-      p.mana = Math.min(p.maxMana, p.mana + MANA_REGEN * dt);
+      // Si está rezando, el maná sube rápido; si no, despacio.
+      const rate = p.prayer > 0 ? PRAYER_REGEN : MANA_REGEN;
+      p.mana = Math.min(p.maxMana, p.mana + rate * dt);
     }
     renderMana();
 
@@ -822,7 +940,9 @@
   }
 
   function swordHitbox(p) {
-    const reach = 52;
+    // La espada tiene más alcance que la cruz: es el arma de cerca y pega
+    // fuerte (3 de daño vs 1 de la cruz).
+    const reach = 74;
     const x = p.facing > 0 ? p.x + p.w - 4 : p.x - reach + 4;
     return { x, y: p.y + 4, w: reach, h: p.h === PLAYER_H ? 26 : 16 };
   }
@@ -866,6 +986,19 @@
     if (!jumpDown) p.jumpHeld = false;
     if (!p.jumpHeld && p.vy < -80) p.vy += 1500 * dt;
 
+    // Oración: mientras se mantenga pulsado y no esté atacando ni
+    // deslizando, el chico reza. Aparece la Virgen sobre él y el maná
+    // sube rápido. Al moverse (o al soltar / interrumpir) el rezo cesa y
+    // el caballero vuelve a la posición inicial.
+    const praying = !!held.prayer && p.attack <= 0 && p.dash <= 0 && p.cast <= 0 && !left && !right;
+    if (praying) {
+      p.prayer = PRAYER_TIME;
+      // Rezar frena al chico: se arrodilla y no avanza.
+      p.vx *= Math.pow(0.02, dt);
+    } else if (p.prayer > 0) {
+      p.prayer -= dt;
+    }
+
     if (p.dashCd > 0) p.dashCd -= dt;
     if (p.dash > 0) {
       p.dash -= dt;
@@ -904,7 +1037,7 @@
     if (p.attackCd > 0) p.attackCd -= dt;
     if (p.attack > 0) p.attack -= dt;
     if (edge.attack && p.attackCd <= 0) {
-      p.attack = 0.28;
+      p.attack = ATTACK_TIME;
       p.attackCd = 0.36;
       sfx.slash();
     }
@@ -1159,7 +1292,7 @@
     if (!world.arenaLock && p.x > world.level.arenaX) {
       world.arenaLock = true;
       world.boss = makeBoss();
-      world.level.platforms.push({ x: 3628, y: 80, w: 36, h: 420, kind: "hell" });
+      world.level.platforms.push({ x: 4040, y: 80, w: 36, h: 420, kind: "hell" });
       sfx.boss();
       shake = 12;
     }
@@ -1182,8 +1315,8 @@
     let minX = 0;
     let maxX = world.level.width - W;
     if (world.arenaLock) {
-      minX = 3640;
-      maxX = 4500 - W;
+      minX = 4060;
+      maxX = 5000 - W;
     }
     const desired = clamp(targetX, minX, maxX);
     world.cam.x += (desired - world.cam.x) * Math.min(1, dt * 7);
@@ -1278,7 +1411,9 @@
     drawHillRidge(camX * 0.12, 318, lerpColor("#1d1930", "#2c1119", hell));
 
     // La catedral cierra la calle: se dibuja a escala del mundo y las casas se recortan antes de ella.
-    const cathX = 3752 - camX;
+    // La fachada se sitúa en la entrada del arena: el caballero cruza la
+    // puerta y adentro (a la derecha) encuentra al demonio en la nave.
+    const cathX = 3710 - camX;
     const clipRight = clamp(cathX + 54, 0, W);
     if (clipRight > 0) {
       ctx.save();
@@ -1290,6 +1425,7 @@
       ctx.restore();
     }
     drawCathedral(cathX, hell);
+    drawCathedralInterior(camX, hell);
     drawStreetHaze(hell);
   }
 
@@ -1620,6 +1756,117 @@
     // Alas de angel.
     ctx.fillStyle = lerpColor("#f4f0e6", "#7c4a44", t);
     ctx.beginPath(); ctx.moveTo(nL + 6, nT + 26); ctx.quadraticCurveTo(nL + 15, nT + 20, nL + 24, nT + 26); ctx.closePath(); ctx.fill();
+  }
+
+  // Interior de la catedral: ocupa toda la nave del arena del jefe.
+  // Dibuja bóvedas con arcos ojivales, columnas laterales y un altar
+  // al fondo (junto al muro derecho) con la Virgen luminosa.
+  function drawCathedralInterior(camX, hell) {
+    const aL = 4100, aR = 4960;          // nave (coords mundo)
+    const x0 = aL - camX, x1 = aR - camX;
+    if (x1 < -20 || x0 > W + 20) return;
+    const t = hell * 0.42;
+    const baseY = 500;
+    const ceilY = 70;                    // techo abovedado
+    const wall = lerpColor("#f4f0e6", "#7c4a44", t);
+    const wallSh = lerpColor("#ddd6c6", "#5e3534", t);
+    const wallDk = lerpColor("#c4bcaa", "#4a2622", t);
+    const wain = lerpColor("#9a5a3c", "#5a2418", t);
+    const wainSh = lerpColor("#6e3e26", "#3a160e", t);
+    const tile = lerpColor("#b23a2a", "#5a1612", t);
+
+    ctx.save();
+    // Recorta al rectángulo de la nave para no pintar fuera.
+    ctx.beginPath();
+    ctx.rect(Math.max(0, x0), 0, Math.min(W, x1) - Math.max(0, x0), H);
+    ctx.clip();
+
+    // Fondo de la nave: muro trasero oscuro que da profundidad.
+    const bg = ctx.createLinearGradient(0, ceilY, 0, baseY);
+    bg.addColorStop(0, lerpColor("#2a2230", "#1a0a10", t));
+    bg.addColorStop(1, lerpColor("#3a2e3a", "#241016", t));
+    ctx.fillStyle = bg;
+    ctx.fillRect(x0, 0, x1 - x0, baseY);
+
+    // Bóvedas: arcos ojivales a lo largo de la nave.
+    const bays = 4;
+    const bayW = (aR - aL) / bays;
+    for (let i = 0; i < bays; i++) {
+      const bx0 = aL + i * bayW - camX;
+      const bx1 = bx0 + bayW;
+      const cx = (bx0 + bx1) / 2;
+      // Vano entre columnas: muro encalado.
+      const wg = ctx.createLinearGradient(bx0, 0, bx1, 0);
+      wg.addColorStop(0, wallSh); wg.addColorStop(0.5, wall); wg.addColorStop(1, wallDk);
+      ctx.fillStyle = wg;
+      ctx.fillRect(bx0, ceilY, bayW, baseY - ceilY);
+      // Arco ojival del tramo.
+      ctx.fillStyle = lerpColor("#e8e2d4", "#6a3e38", t);
+      ctx.beginPath();
+      ctx.moveTo(bx0 + 6, ceilY + 40);
+      ctx.quadraticCurveTo(cx, ceilY - 26, bx1 - 6, ceilY + 40);
+      ctx.lineTo(bx1 - 6, ceilY);
+      ctx.lineTo(bx0 + 6, ceilY);
+      ctx.closePath(); ctx.fill();
+      // Sombra del arco.
+      ctx.fillStyle = lerpColor("#bcb4a4", "#52302a", t);
+      ctx.beginPath();
+      ctx.moveTo(cx, ceilY - 22); ctx.lineTo(bx1 - 6, ceilY + 40); ctx.lineTo(cx, ceilY + 40); ctx.closePath(); ctx.fill();
+      // Teja superior (cubierta).
+      ctx.fillStyle = tile;
+      ctx.beginPath();
+      ctx.moveTo(bx0, ceilY); ctx.lineTo(cx, ceilY - 30); ctx.lineTo(bx1, ceilY); ctx.closePath(); ctx.fill();
+    }
+
+    // Columnas laterales: pilastras a ambos lados de cada tramo.
+    ctx.fillStyle = lerpColor("#d8d2c4", "#5a3430", t);
+    for (let i = 0; i <= bays; i++) {
+      const cx = aL + i * bayW - camX;
+      ctx.fillRect(cx - 7, ceilY + 4, 14, baseY - ceilY - 4);
+      ctx.fillStyle = lerpColor("#bcb4a4", "#4a2824", t);
+      ctx.fillRect(cx + 2, ceilY + 4, 5, baseY - ceilY - 4);
+      ctx.fillStyle = lerpColor("#d8d2c4", "#5a3430", t);
+      // Capitel.
+      ctx.fillRect(cx - 12, ceilY, 24, 8);
+    }
+
+    // Zócalo de madera (zanca) a lo largo del muro bajo.
+    const zT = baseY - 34;
+    const zg = ctx.createLinearGradient(0, zT, 0, baseY);
+    zg.addColorStop(0, wain); zg.addColorStop(1, wainSh);
+    ctx.fillStyle = zg;
+    ctx.fillRect(x0, zT, x1 - x0, baseY - zT);
+    ctx.strokeStyle = `rgba(0,0,0,${0.2 + t * 0.2})`; ctx.lineWidth = 1;
+    for (let sx = Math.ceil(x0 / 26) * 26; sx < x1; sx += 26) {
+      ctx.beginPath(); ctx.moveTo(sx, zT); ctx.lineTo(sx, baseY); ctx.stroke();
+    }
+
+    // Altar al fondo (junto al muro derecho) con la Virgen luminosa.
+    const altCx = aR - 70 - camX;
+    const altW = 70, altH = 60, altY = baseY - altH;
+    ctx.fillStyle = lerpColor("#c9b8a0", "#6a3a30", t);
+    ctx.fillRect(altCx - altW / 2, altY, altW, altH);
+    ctx.fillStyle = lerpColor("#9a8a72", "#4a2620", t);
+    ctx.fillRect(altCx - altW / 2, altY, altW, 6);
+    // Resplandor del altar.
+    const spill = ctx.createRadialGradient(altCx, altY - 10, 6, altCx, altY - 10, 120);
+    spill.addColorStop(0, `rgba(255,220,150,${0.30 - hell * 0.18})`);
+    spill.addColorStop(1, "rgba(255,200,120,0)");
+    ctx.fillStyle = spill;
+    ctx.fillRect(altCx - 90, altY - 90, 180, 160);
+    // Cruz luminosa sobre el altar.
+    ctx.strokeStyle = lerpColor("#f4e6b0", "#c44a3a", t);
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(altCx, altY - 8); ctx.lineTo(altCx, altY - 70);
+    ctx.moveTo(altCx - 14, altY - 44); ctx.lineTo(altCx + 14, altY - 44);
+    ctx.stroke();
+    // Llamas del infierno que profanan el altar cuando sube el mal.
+    if (hell > 0.2) {
+      ctx.fillStyle = `rgba(220,60,40,${0.12 + hell * 0.22 + Math.sin(time * 4) * 0.04})`;
+      ctx.fillRect(x0, baseY - 60, x1 - x0, 60);
+    }
+    ctx.restore();
   }
 
   function drawStreetHaze(hell) {
@@ -1968,6 +2215,8 @@
     ctx.save();
     ctx.globalAlpha = 0.72 + 0.28 * alpha;
     ctx.translate(-2, -40);
+    // Alas más grandes: se escala todo el plumaje desde la raíz del hombro.
+    ctx.scale(1.3, 1.3);
 
     // Resplandor santo detrás del plumaje.
     ctx.save();
@@ -2034,6 +2283,10 @@
   // capa). Los ángulos van en radianes; positivo gira hacia donde mira.
 
   const HERO_SCALE = 1.36;
+  // Duración de la animación del espadazo. Es algo mayor que antes para que
+  // se lea el arco completo (anticipación, tajo y follow-through) sin pasarse
+  // del enfriamiento del ataque, así que el ritmo de golpes no cambia.
+  const ATTACK_TIME = 0.34;
   const HIP_Y = -30;          // cadera respecto a los pies
   const THIGH = 15;
   const SHIN = 12.5;
@@ -2198,6 +2451,8 @@
       elF: -0.45,
       head: 0.02,
       grip: 1.35,
+      slide: 0,
+      kneel: 0,
       hair: 0,
       hairV: 0,
       cape: [0.3, 0.12, 0.09, 0.06],
@@ -2226,6 +2481,7 @@
     let shB = -0.1;
     let elB = -1.15;
     let head = 0.02;
+    let grip = 1.35;
 
     // Reposo: respiracion lenta. El cuerpo se asienta y la cabeza y los
     // brazos oscilan apenas; da vida sin que se vea rigido.
@@ -2239,18 +2495,24 @@
     }
 
     if (slide) {
-      // Derrape: cadera baja, pierna de adelante estirada, torso echado.
+      // Derrape. El héroe se dibuja mirando a +x (el volteo lo hace facing),
+      // y en esta convención una cadera NEGATIVA lanza el muslo hacia +x.
+      // Por eso hipF/hipB van negativos: las dos piernas salen hacia la
+      // dirección del derrape y son ellas las que van delante. La pierna
+      // cercana va casi estirada y lidera el deslizamiento; la lejana va
+      // plegada, con la rodilla adelante y el pie recogido bajo la cadera,
+      // lo que además baja la pelvis y deja el cuerpo tumbado hacia atrás.
       crouch = 1;
-      lean = 0.85;
-      hipF = 1.35;
-      kneeF = 0.25;
-      hipB = 0.35;
-      kneeB = 1.9;
-      shF = 0.75;
-      elF = -0.2;
-      shB = 0.35;
-      elB = -1.3;
-      head = -0.34;
+      lean = -0.7;
+      hipF = -1.05;
+      kneeF = 0.1;
+      hipB = -1.15;
+      kneeB = 2.3;
+      shF = -0.85;
+      elF = -0.5;
+      shB = 0.55;
+      elB = -0.85;
+      head = -0.25;
     } else if (air) {
       const rising = p.vy < 0;
       lean = rising ? 0.13 : -0.03;
@@ -2293,35 +2555,57 @@
       crouch = Math.max(crouch, k * 0.5);
     }
 
+    // Oración: el caballero se arrodilla con las pantorrillas horizontales
+    // sobre el suelo, los brazos se alzan al cielo y la espada
+    // se yergue como una cruz. Esta pose manda sobre las demás
+    // (salvo el espadazo, que la interrumpe).
+    if (p.prayer > 0 && p.attack <= 0) {
+      crouch = 1.15;            // baja del todo: rodillas al suelo
+      lean = -0.05;           // torso casi erguido
+      // Muslos verticales (hip ~0) y espinas horizontales
+      // (knee ~π/2): la pantorrilla queda plana sobre el suelo.
+      hipF = -0.05; kneeF = 1.55;
+      hipB = -0.05; kneeB = 1.55;
+      // Brazos al cielo: hombros muy levantados y codos casi rectos.
+      shF = -2.45; elF = -0.05;
+      shB = -2.25; elB = -0.05;
+      head = 0.12;              // cabeza alzada mirando al cielo
+      grip = 1.9;                 // espada vertical como cruz
+    }
+
     // El espadazo manda sobre el brazo delantero: anticipacion, tajo y
     // follow-through. El cuerpo lungea hacia adelante en el golpe.
     if (p.attack > 0) {
-      const t = clamp(1 - p.attack / 0.28, 0, 1);
-      if (t < 0.2) {
-        // Anticipacion: arma atras, cuerpo se carga y escudo sube.
-        const a = t / 0.2;
-        shF = 0.4 + a * 1.0;
-        elF = -0.5 - a * 0.7;
-        lean -= a * 0.12;
-        head -= a * 0.08;
-        shB += a * 0.3;
-        crouch = Math.max(crouch, a * 0.15);
+      const t = clamp(1 - p.attack / ATTACK_TIME, 0, 1);
+      if (t < 0.22) {
+        // Anticipacion: arma atras y arriba, cuerpo se carga y escudo sube.
+        const a = t / 0.22;
+        shF = 0.4 + a * 1.25;
+        elF = -0.5 - a * 0.95;
+        lean -= a * 0.18;
+        head -= a * 0.12;
+        shB += a * 0.35;
+        crouch = Math.max(crouch, a * 0.2);
+        kneeF += a * 0.22;
+        kneeB += a * 0.18;
       } else if (t < 0.55) {
-        // Tajo: descarga rapida hacia adelante con lunge del cuerpo.
-        const k = (t - 0.2) / 0.35;
-        const e = Math.sin((k) * Math.PI);           // impulso que sube y baja
-        shF = 1.4 - k * 2.7;
-        elF = -1.2 + k * 1.0;
-        lean += 0.18 * e;                            // lunge adelante en el pico
-        head += 0.12 * e;
-        crouch = Math.max(crouch, 0.12 * e);
-        kneeF += 0.25 * e;                          // pierna adelantada carga el golpe
+        // Tajo: arco amplio hacia adelante-abajo, el brazo se extiende en el
+        // pico y el cuerpo lungea con el golpe.
+        const k = (t - 0.22) / 0.33;
+        const e = Math.sin(k * Math.PI);             // impulso que sube y baja
+        shF = 1.65 - k * 3.0;
+        elF = -1.45 + k * 1.25;
+        lean += 0.26 * e;                            // lunge adelante en el pico
+        head += 0.16 * e;
+        crouch = Math.max(crouch, 0.16 * e);
+        kneeF += 0.3 * e;                            // pierna adelantada carga el golpe
       } else {
         // Follow-through: la hoja sigue su inercia, el cuerpo se recupera.
         const k = (t - 0.55) / 0.45;
-        shF = -1.3 + k * 0.5;
-        elF = -0.2 - k * 0.3;
-        lean -= (1 - k) * 0.06;
+        shF = -1.35 + k * 0.55;
+        elF = -0.2 - k * 0.35;
+        lean -= (1 - k) * 0.1;
+        head -= (1 - k) * 0.04;
       }
       head += Math.sin(t * Math.PI) * 0.05;
     }
@@ -2337,22 +2621,40 @@
     }
 
     const rate = 17;
-    r.lean = approach(r.lean, lean, rate, dt);
-    r.crouch = approach(r.crouch, crouch, slide ? 26 : 13, dt);
-    r.hipF = approach(r.hipF, hipF, rate, dt);
-    r.kneeF = approach(r.kneeF, kneeF, rate, dt);
-    r.hipB = approach(r.hipB, hipB, rate, dt);
-    r.kneeB = approach(r.kneeB, kneeB, rate, dt);
-    r.shF = approach(r.shF, shF, p.attack > 0 ? 34 : rate, dt);
-    r.elF = approach(r.elF, elF, p.attack > 0 ? 34 : rate, dt);
-    r.shB = approach(r.shB, shB, rate, dt);
-    r.elB = approach(r.elB, elB, rate, dt);
-    r.head = approach(r.head, head, 12, dt);
-    // Agarre: en reposo la hoja cuelga; al golpear se alinea con el antebrazo.
-    r.grip = approach(r.grip, p.attack > 0 ? 0.35 : p.cast > 0 ? 0.95 : 1.35, 26, dt);
+    // En el derrape las piernas llegan a su pose mucho antes que el tronco:
+    // se disparan hacia la dirección del deslizamiento y el resto del cuerpo
+    // las sigue, arrastrado. Al rezar el caballero se arrodilla despacio:
+    // el cuerpo baja con suavidad, no de golpe.
+    const praying = p.prayer > 0 && p.attack <= 0;
+    const rLeg = slide ? 30 : praying ? 9 : rate;
+    const rBody = slide ? 7 : praying ? 9 : rate;
+    r.lean = approach(r.lean, lean, rBody, dt);
+    r.crouch = approach(r.crouch, crouch, slide ? 26 : praying ? 9 : 13, dt);
+    r.hipF = approach(r.hipF, hipF, rLeg, dt);
+    r.kneeF = approach(r.kneeF, kneeF, rLeg, dt);
+    r.hipB = approach(r.hipB, hipB, rLeg, dt);
+    r.kneeB = approach(r.kneeB, kneeB, rLeg, dt);
+    r.shF = approach(r.shF, shF, p.attack > 0 ? 34 : rBody, dt);
+    r.elF = approach(r.elF, elF, p.attack > 0 ? 34 : rBody, dt);
+    r.shB = approach(r.shB, shB, rBody, dt);
+    r.elB = approach(r.elB, elB, rBody, dt);
+    r.head = approach(r.head, head, slide ? 7 : praying ? 9 : 12, dt);
+    r.kneel = approach(r.kneel, praying ? 1 : 0, 9, dt);
+    // Agarre: en reposo la hoja cuelga; al golpear se alinea con el antebrazo
+    // y va abriéndose a lo largo del tajo. Al rezar la espada se yergue
+    // como una cruz (grip = 1.9).
+    let gripTarget = grip;
+    if (p.attack > 0) {
+      const t = clamp(1 - p.attack / ATTACK_TIME, 0, 1);
+      gripTarget = t < 0.22 ? 0.35 : t < 0.55 ? 0.35 + ((t - 0.22) / 0.33) * 0.4 : 0.75;
+    } else if (p.cast > 0) {
+      gripTarget = 0.95;
+    }
+    r.grip = approach(r.grip, gripTarget, 26, dt);
     // El pie busca quedar plano en el suelo pese al giro de la pierna.
-    r.ankleF = approach(r.ankleF, clamp(-(r.hipF + r.kneeF) * 0.55, -0.5, 0.5), rate, dt);
-    r.ankleB = approach(r.ankleB, clamp(-(r.hipB + r.kneeB) * 0.55, -0.5, 0.5), rate, dt);
+    r.ankleF = approach(r.ankleF, clamp(-(r.hipF + r.kneeF) * 0.55, -0.5, 0.5), rLeg, dt);
+    r.ankleB = approach(r.ankleB, clamp(-(r.hipB + r.kneeB) * 0.55, -0.5, 0.5), rLeg, dt);
+    r.slide = approach(r.slide, slide ? 1 : 0, slide ? 7 : 14, dt);
 
     // Respiración en reposo, rebote al correr.
     r.bob = run ? Math.abs(Math.sin(ph)) * 1.5 : Math.sin(time * 3) * 0.4;
@@ -3006,9 +3308,9 @@
   // Estela del tajo: va anclada al pecho, no al brazo, para que el arco se
   // lea como el recorrido de la hoja y no gire con el hombro.
   function drawSlashArc(p) {
-    const t = clamp(1 - p.attack / 0.28, 0, 1);
-    if (t < 0.2) return;
-    const k = (t - 0.2) / 0.8;
+    const t = clamp(1 - p.attack / ATTACK_TIME, 0, 1);
+    if (t < 0.22) return;
+    const k = (t - 0.22) / 0.78;
     ctx.save();
     ctx.globalCompositeOperation = "screen";
     ctx.translate(7, -9);
@@ -3218,6 +3520,208 @@
     ctx.restore();
   }
 
+  // La Virgen que aparece mientras el chico reza. Es una silueta luminosa
+  // con manto, halo de estrellas y manos abiertas: se desvanece al final
+  // de la oración. Se dibuja en coordenadas de mundo (no del héroe) para
+  // que flote sobre él sin girar con facing.
+  function drawVirgin(p, camX) {
+    const a = clamp(p.prayer / PRAYER_TIME, 0, 1);
+    if (a <= 0.02) return;
+    const cx = p.x - camX + p.w / 2;
+    const cy = p.y - 8;
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = a * 0.9;
+    // Halo grande detrás.
+    const halo = ctx.createRadialGradient(cx, cy - 30, 4, cx, cy - 30, 46);
+    halo.addColorStop(0, "rgba(255,250,230,0.95)");
+    halo.addColorStop(0.5, "rgba(255,238,200,0.5)");
+    halo.addColorStop(1, "rgba(255,220,150,0)");
+    ctx.fillStyle = halo;
+    ctx.beginPath(); ctx.arc(cx, cy - 30, 46, 0, Math.PI * 2); ctx.fill();
+    // Cuerpo: manto triangular que cae en gracia.
+    ctx.globalAlpha = a * 0.8;
+    ctx.fillStyle = "rgba(244,238,255,0.92)";
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 44);
+    ctx.quadraticCurveTo(cx - 22, cy - 10, cx - 18, cy + 6);
+    ctx.quadraticCurveTo(cx, cy + 2, cx + 18, cy + 6);
+    ctx.quadraticCurveTo(cx + 22, cy - 10, cx, cy - 44);
+    ctx.closePath(); ctx.fill();
+    // Cabeza con velo.
+    ctx.fillStyle = "rgba(255,250,240,0.95)";
+    ctx.beginPath(); ctx.arc(cx, cy - 46, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(230,222,245,0.85)";
+    ctx.beginPath();
+    ctx.moveTo(cx - 7, cy - 48);
+    ctx.quadraticCurveTo(cx, cy - 40, cx + 7, cy - 48);
+    ctx.quadraticCurveTo(cx + 5, cy - 52, cx, cy - 50);
+    ctx.quadraticCurveTo(cx - 5, cy - 52, cx - 7, cy - 48);
+    ctx.closePath(); ctx.fill();
+    // Manos abiertas a los lados.
+    ctx.fillStyle = "rgba(255,250,240,0.9)";
+    ctx.beginPath(); ctx.ellipse(cx - 12, cy - 18, 3.2, 5, -0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + 12, cy - 18, 3.2, 5, 0.3, 0, Math.PI * 2); ctx.fill();
+    // Estrellas del halo.
+    ctx.globalAlpha = a;
+    ctx.fillStyle = "rgba(255,255,255,0.95)";
+    for (let i = 0; i < 7; i++) {
+      const ang = i / 7 * Math.PI * 2 - Math.PI / 2;
+      const r = 30 + Math.sin(time * 3 + i) * 2;
+      const sx = cx + Math.cos(ang) * r, sy = cy - 30 + Math.sin(ang) * r;
+      star(sx, sy, 1.6);
+    }
+    ctx.restore();
+  }
+
+  // Estrella de cuatro puntas para el halo de la Virgen.
+  function star(x, y, s) {
+    ctx.beginPath();
+    ctx.moveTo(x, y - s);
+    ctx.quadraticCurveTo(x + s * 0.3, y - s * 0.3, x + s, y);
+    ctx.quadraticCurveTo(x + s * 0.3, y + s * 0.3, x, y + s);
+    ctx.quadraticCurveTo(x - s * 0.3, y + s * 0.3, x - s, y);
+    ctx.quadraticCurveTo(x - s * 0.3, y - s * 0.3, x, y - s);
+    ctx.closePath(); ctx.fill();
+  }
+
+  // --- Piezas del modelo por sprites ---------------------------------
+  // Dibuja una pieza anclada en el origen actual del contexto. `dim` oscurece
+  // y desatura para las piezas del lado lejano.
+  function kpart(key, dim) {
+    const p = KNIGHT_PARTS[key];
+    const im = knightImgs[p.file];
+    if (!im || !im.complete || !im.naturalWidth) return;
+    // Si la pieza es lejana (dim > 0) usa la versión pre-oscurecida del
+    // caché en vez de aplicar ctx.filter cada frame.
+    const src = dim ? (dimImg(im) || im) : im;
+    const sw = src.naturalWidth || src.width, sh = src.naturalHeight || src.height;
+    const dw = (p.w != null ? p.w : p.h * sw / sh) * (p.scaleX || 1);
+    const dh = (p.h != null ? p.h : p.w * sh / sw) * (p.scaleY || 1);
+    const dx = -p.ax * dw, dy = -p.ay * dh;
+    ctx.save();
+    if (p.rot) ctx.rotate(p.rot);
+    if (p.flip) ctx.scale(-1, 1);
+    ctx.drawImage(src, p.flip ? -(dx + dw) : dx, dy, dw, dh);
+    ctx.restore();
+  }
+
+  // Pierna en tres segmentos articulados: muslo, greba y bota. Cada lado
+  // tiene su propio sprite porque la perspectiva no es la misma.
+  function kLeg(rig, front) {
+    const dim = front ? 0 : .34;
+    const hip = front ? rig.hipF : rig.hipB;
+    const knee = front ? rig.kneeF : rig.kneeB;
+    const ank = front ? rig.ankleF : rig.ankleB;
+    ctx.save();
+    ctx.rotate(hip);
+    kpart(front ? "musloCerca" : "musloLejos", dim);
+    ctx.translate(0, THIGH); ctx.rotate(knee);
+    kpart(front ? "grebaCerca" : "grebaLejos", dim);
+    ctx.translate(0, SHIN); ctx.rotate(ank);
+    kpart(front ? "botaCerca" : "botaLejos", dim);
+    ctx.restore();
+  }
+
+  // Brazo en dos segmentos. `hand` se ejecuta ya en el espacio de la mano.
+  function kArm(sh, el, dim, hand, far) {
+    ctx.save();
+    ctx.rotate(sh);
+    kpart(far ? "brazoLejos" : "brazo", dim);
+    ctx.translate(0, UPPER_ARM); ctx.rotate(el);
+    kpart(far ? "antebrazoLejos" : "antebrazo", dim);
+    ctx.translate(0, FOREARM);
+    if (hand) hand();
+    ctx.restore();
+  }
+
+  // Guantelete vectorial: el sprite de antebrazo lejano no trae guante, así
+  // que esta mano se dibuja encima del escudo para que se lea que lo agarra.
+  function kGauntlet(dim) {
+    ctx.save();
+    // El guantelete es vectorial: no hay sprite que cachear, así que se
+    // oscurece con globalAlpha en vez de ctx.filter (mucho más barato).
+    if (dim) ctx.globalAlpha = 0.82;
+    const g = ctx.createLinearGradient(-2.3, -1.4, 2.3, 4);
+    g.addColorStop(0, "#eef1f7"); g.addColorStop(.45, "#bcc5d4"); g.addColorStop(1, "#7c8695");
+    ctx.fillStyle = g;
+    roundRect(-2.3, -1.4, 4.6, 5.3, 1.6); ctx.fill();
+    ctx.strokeStyle = "rgba(58,64,78,.6)"; ctx.lineWidth = .3; ctx.stroke();
+    ctx.strokeStyle = "rgba(68,76,92,.5)"; ctx.lineWidth = .26;
+    for (let i = 0; i < 3; i++) {
+      const y = .15 + i * 1.2;
+      ctx.beginPath(); ctx.moveTo(-1.9, y); ctx.lineTo(1.9, y); ctx.stroke();
+    }
+    ctx.fillStyle = "#ccd4e1";
+    ctx.beginPath(); ctx.ellipse(1.5, 1.4, .85, 1.9, -.35, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(58,64,78,.5)"; ctx.lineWidth = .24; ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,.3)";
+    ctx.beginPath(); ctx.ellipse(-.9, .1, 1.05, .65, -.4, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  // Ensamblaje del modelo por sprites. Mismo orden de capas que el preview:
+  // capa -> piernas -> hombrera lejana -> escudo -> brazo lejano + mano ->
+  // coraza -> cabeza -> espada -> brazo de la espada -> hombrera cercana.
+  function drawKnightSprites(p, rig, pelvisY, torsoY, torsoX) {
+    const J = KNIGHT_JOINTS;
+    ctx.save();
+    ctx.translate(torsoX, torsoY); ctx.rotate(rig.lean);
+    ctx.save();
+    ctx.translate(J.cape.x, J.cape.y); ctx.rotate(rig.cape[0] * .6);
+    kpart("capa", 0);
+    ctx.restore();
+    ctx.restore();
+
+    ctx.save(); ctx.translate(J.hipB.x, pelvisY + J.hipB.y); kLeg(rig, false); ctx.restore();
+    ctx.save(); ctx.translate(J.hipF.x, pelvisY + J.hipF.y); kLeg(rig, true);  ctx.restore();
+
+    ctx.save();
+    ctx.translate(torsoX, torsoY); ctx.rotate(rig.lean);
+
+    ctx.save(); ctx.translate(J.pauldronB.x, J.pauldronB.y); kpart("hombreraLejos", .34); ctx.restore();
+
+    ctx.save(); ctx.translate(J.shoulderB.x, J.shoulderB.y);
+    // El escudo va al fondo de todo el brazo: se recorre la cadena
+    // hombro-codo-mano para colocarlo y luego el brazo se dibuja encima.
+    ctx.save();
+    ctx.rotate(rig.shB);
+    ctx.translate(0, UPPER_ARM); ctx.rotate(rig.elB);
+    ctx.translate(0, FOREARM);
+    ctx.translate(0, -FOREARM * .45);
+    ctx.rotate(-(rig.shB + rig.elB) + .12);
+    ctx.translate(J.shield.x, J.shield.y);
+    kpart("escudo", 0);
+    ctx.restore();
+    kArm(rig.shB, rig.elB, .3, () => kGauntlet(.3), true);
+    ctx.restore();
+
+    ctx.save(); ctx.translate(J.coraza.x, J.coraza.y); kpart("coraza", 0); ctx.restore();
+
+    ctx.save();
+    ctx.translate(J.head.x, J.head.y); ctx.rotate(rig.head);
+    ctx.fillStyle = SKIN_DK;                       // cuello, bajo el yelmo
+    roundRect(-2.6, 2, 5.6, 7, 2); ctx.fill();
+    kpart("cabeza", 0);
+    ctx.restore();
+
+    ctx.save(); ctx.translate(J.shoulderF.x, J.shoulderF.y);
+    // Espada por DETRÁS del brazo: así el guantelete del antebrazo cercano
+    // tapa la empuñadura y se lee como que la mano la sostiene.
+    ctx.save();
+    ctx.rotate(rig.shF);
+    ctx.translate(0, UPPER_ARM); ctx.rotate(rig.elF);
+    ctx.translate(0, FOREARM);
+    ctx.translate(J.sword.x, J.sword.y); ctx.rotate(rig.grip);
+    kpart("espada", 0);
+    ctx.restore();
+    kArm(rig.shF, rig.elF, 0, null, false);
+    ctx.restore();
+
+    ctx.save(); ctx.translate(J.pauldronF.x, J.pauldronF.y); kpart("hombreraCerca", 0); ctx.restore();
+    ctx.restore();
+  }
+
   // --- Ensamblaje: de las piezas de atrás a las de adelante ----------
   function drawPlayer(p, camX) {
     if (p.dead) return;
@@ -3243,10 +3747,35 @@
       pelvisY = -Math.max(reach(rig.hipF, rig.kneeF), reach(rig.hipB, rig.kneeB));
     }
     const torsoY = pelvisY - 3;
+    // En el derrape el tronco se retrasa respecto a las caderas: las piernas
+    // van delante y el cuerpo queda colgando detrás.
+    const torsoX = -rig.slide * 3.5;
+
+    // Modelo por sprites de IA. Solo entra cuando todas las piezas cargaron;
+    // si falta alguna se sigue con el dibujo vectorial de abajo.
+    if (knightReady()) {
+      drawKnightSprites(p, rig, pelvisY, torsoY, torsoX);
+      if (p.attack > 0) {
+        ctx.save();
+        ctx.translate(torsoX, torsoY);
+        ctx.rotate(rig.lean);
+        drawSlashArc(p);
+        ctx.restore();
+      }
+      if (p.cast > 0) {
+        ctx.save();
+        ctx.translate(torsoX, torsoY);
+        ctx.rotate(rig.lean);
+        drawCastGlow(p);
+        ctx.restore();
+      }
+      ctx.restore();
+      return;
+    }
 
     // Capa, detrás de todo.
     ctx.save();
-    ctx.translate(0, torsoY);
+    ctx.translate(torsoX, torsoY);
     ctx.rotate(rig.lean);
     drawCape(rig);
     ctx.restore();
@@ -3265,7 +3794,7 @@
 
     // Torso y lo que cuelga de él.
     ctx.save();
-    ctx.translate(0, torsoY);
+    ctx.translate(torsoX, torsoY);
     ctx.rotate(rig.lean);
 
     // Hombro lejano y su brazo, por detrás del pecho.
@@ -3890,6 +4419,7 @@
     if (world.boss) drawBoss(world.boss, camX);
     drawLock(camX, p);
     drawPlayer(p, camX);
+    drawVirgin(p, camX);
     drawHoly(camX);
     drawParticles(camX);
     drawRings(camX);
@@ -3973,6 +4503,7 @@
     }
     if (["j", "J", "x", "X"].includes(e.key) && !e.repeat) edge.attack = true;
     if (["k", "K", "c", "C"].includes(e.key) && !e.repeat) edge.cross = true;
+    if (["q", "Q", "e", "E"].includes(e.key)) held.prayer = true;
     if (!e.repeat) {
       if (["ArrowLeft", "a", "A"].includes(e.key)) registerTap(-1);
       if (["ArrowRight", "d", "D"].includes(e.key)) registerTap(1);
@@ -3980,6 +4511,7 @@
   });
   window.addEventListener("keyup", (e) => {
     keys[e.key] = false;
+    if (["q", "Q", "e", "E"].includes(e.key)) held.prayer = false;
   });
 
   function bindButton(btn) {
@@ -4013,7 +4545,7 @@
   for (const btn of touchEl.querySelectorAll(".btn")) bindButton(btn);
 
   window.addEventListener("blur", () => {
-    held.left = held.right = held.jump = held.attack = held.cross = false;
+    held.left = held.right = held.jump = held.attack = held.cross = held.prayer = false;
   });
 
   resetWorld();

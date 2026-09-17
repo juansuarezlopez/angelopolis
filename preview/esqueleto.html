@@ -1,0 +1,794 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Editor de esqueleto — Caballero</title>
+<style>
+  :root { color-scheme: dark; --gold:#e8c872; --ink:#0b0912; }
+  * { box-sizing:border-box }
+  body { margin:0; padding:18px; background:radial-gradient(circle at 50% 0,#211a35,var(--ink) 60%);
+    color:#eee8dc; font:13.5px/1.5 system-ui,sans-serif }
+  h1 { color:var(--gold); margin:0 0 3px; font-size:20px }
+  .sub { color:#9c927f; margin:0 0 14px; font-size:12.5px }
+  a { color:#9fb6ff }
+  .layout { display:grid; grid-template-columns:1fr 340px; gap:16px; align-items:start;
+    max-width:1300px; margin:auto }
+  @media (max-width:980px){ .layout { grid-template-columns:1fr } }
+  .stage { position:relative; border:1px solid #3b3350; border-radius:10px; overflow:hidden;
+    background:linear-gradient(180deg,#14111f 0%,#1a1526 62%,#241d2e 62%,#191426 100%) }
+  canvas { display:block; width:100%; height:auto; cursor:grab; touch-action:none }
+  canvas.drag { cursor:grabbing }
+  .bar { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 0 }
+  button { appearance:none; cursor:pointer; border:1px solid #66583b; border-radius:5px;
+    background:#19140d; color:var(--gold); font:inherit; font-size:11.5px;
+    letter-spacing:.06em; text-transform:uppercase; padding:7px 11px }
+  button.on { background:#5c4a1e; color:#fff6d8 }
+  button.act { border-color:#4a7d5a; color:#a8f0c0; background:#122019 }
+  .panel { border:1px solid #3b3350; border-radius:10px; background:#120f1c; padding:12px 13px;
+    max-height:88vh; overflow-y:auto }
+  .panel h2 { color:var(--gold); font-size:13px; margin:14px 0 7px; text-transform:uppercase;
+    letter-spacing:.08em }
+  .panel h2:first-child { margin-top:0 }
+  .row { display:grid; grid-template-columns:1fr 62px 62px; gap:5px; align-items:center;
+    padding:2px 0; border-radius:4px }
+  .row.sel { background:#2a2340; outline:1px solid #6a5a9c }
+  .row label { font-size:11.5px; color:#bbb2c7; cursor:pointer; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap }
+  input[type=number] { width:100%; background:#0d0b14; border:1px solid #3a3350; color:#cfe4ff;
+    border-radius:4px; padding:3px 4px; font:inherit; font-size:11.5px }
+  input[type=number]:focus { outline:1px solid #7fb0ff; border-color:#7fb0ff }
+  .hint { font-size:11.5px; color:#8c8399; margin:6px 0 0 }
+  .chk { display:flex; gap:6px; align-items:center; font-size:11.5px; color:#bbb2c7;
+    padding:2px 0; cursor:pointer }
+  .zoom { display:flex; gap:7px; align-items:center; font-size:11.5px; color:#bbb2c7; margin-top:6px }
+  .zoom input { flex:1 }
+  #msg { font-size:11.5px; margin-top:7px; min-height:15px; color:#a8f0c0 }
+  .legend { font-size:11px; color:#7d7490; margin-top:9px; line-height:1.7 }
+  .sw { display:inline-block; width:9px; height:9px; border-radius:50%; vertical-align:0 }
+</style>
+</head>
+<body>
+<h1>Editor de esqueleto y montaje</h1>
+<p class="sub">
+  <a href="/caballero.html">← animación</a> · <a href="/partes.html">piezas sueltas</a> ·
+  Arrastra los puntos amarillos sobre el dibujo. Los sprites se re-montan en vivo.
+</p>
+
+<div class="layout">
+  <div>
+    <div class="stage"><canvas id="cv" width="760" height="820"></canvas></div>
+    <div class="bar" id="poses"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Vista</h2>
+    <label class="chk"><input type="checkbox" id="tSprites" checked> sprites montados</label>
+    <label class="chk"><input type="checkbox" id="tSkel" checked> esqueleto encima</label>
+    <label class="chk"><input type="checkbox" id="tHandles" checked> puntos arrastrables</label>
+    <label class="chk"><input type="checkbox" id="tBoxes"> caja de cada pieza</label>
+    <label class="chk"><input type="checkbox" id="tPause"> congelar animación</label>
+    <div class="zoom">zoom <input type="range" id="zoom" min="5" max="16" step=".5" value="9">
+      <span id="zoomV">9</span></div>
+
+    <h2>Puntos de unión</h2>
+    <div id="points"></div>
+    <p class="hint">Arrastra en el lienzo o escribe el valor. Se aplica al instante.</p>
+
+    <h2>Largo de huesos</h2>
+    <div id="bones"></div>
+
+    <h2>Pieza seleccionada</h2>
+    <div id="partSel"></div>
+    <p class="hint" id="partHint">Haz clic en un sprite del lienzo para ajustar su ancla y tamaño.</p>
+
+    <h2>Guardar</h2>
+    <div class="bar">
+      <button id="save" class="act">guardar ajustes</button>
+      <button id="reset">volver al original</button>
+    </div>
+    <div id="msg"></div>
+
+    <p class="legend">
+      <span class="sw" style="background:#ffd75e"></span> punto de unión ·
+      <span class="sw" style="background:#ff6060"></span> lado cercano ·
+      <span class="sw" style="background:#8f7fd8"></span> lado lejano ·
+      <span class="sw" style="background:#ff8f5e"></span> torso
+    </p>
+  </div>
+</div>
+
+<script>
+"use strict";
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+const CW = cv.width, CH = cv.height;
+
+// ---------------------------------------------------------------------
+// Configuración editable. SH_Y ya viene sumado en los valores de torso.
+const SH_Y = -13;
+const DEFAULT = {
+  bones: { THIGH:15, SHIN:12.5, UPPER_ARM:10, FOREARM:9 },
+  points: {
+    hipB:      { x:-2.4, y:0,        space:"pelvis", label:"cadera lejana" },
+    hipF:      { x:2.8,  y:0,        space:"pelvis", label:"cadera cercana" },
+    pauldronB: { x:-4.6, y:SH_Y+1.2, space:"torso",  label:"hombrera lejana" },
+    shoulderB: { x:-4.6, y:SH_Y+0.6, space:"torso",  label:"hombro lejano" },
+    coraza:    { x:0,    y:0,        space:"torso",  label:"coraza" },
+    head:      { x:0.6,  y:SH_Y-13,  space:"torso",  label:"cabeza" },
+    wing:      { x:-3.8, y:SH_Y-4,   space:"torso",  label:"raíz alas" },
+    cape:      { x:-3.5, y:SH_Y-2,   space:"torso",  label:"capa" },
+    shoulderF: { x:5.4,  y:SH_Y+0.8, space:"torso",  label:"hombro cercano" },
+    pauldronF: { x:5.4,  y:SH_Y+1.2, space:"torso",  label:"hombrera cercana" },
+    shield:    { x:-5.5, y:4,        space:"handB",  label:"escudo en mano" },
+    sword:     { x:1.2,  y:3,        space:"handF",  label:"espada en mano" },
+  },
+  parts: {
+    coraza:        { file:"parte-coraza-v5.png",          box:[345,235,348,540], h:21,   ax:.50, ay:.62 },
+    brazo:         { file:"parte-brazo-cerca-v3.png",     box:[361,173,313,640], h:13.5, ax:.50, ay:.06 },
+    antebrazo:     { file:"parte-antebrazo-cerca-v3.png", box:[375,166,274,639], h:16.5, ax:.50, ay:.08 },
+    brazoLejos:    { file:"parte-brazo-cerca-v3.png",     box:[361,173,313,640], h:13.5, ax:.50, ay:.06, scaleX:.8, scaleY:.8, flip:true },
+    antebrazoLejos:{ file:"parte-antebrazo-lejos-v6.png", box:[362,287,301,437], h:12.5, ax:.50, ay:.08 },
+    escudo:        { file:"parte-escudo-v6.png",          box:[259,134,505,712], h:23,   ax:.50, ay:.50 },
+    espada:        { file:"parte-espada-v3.png",          box:[49,406,928,192],  w:40,   ax:.18, ay:.50 },
+    cabeza:        { file:"parte-cabeza-v3.png",          box:[148,59,743,887],  w:24,   ax:.50, ay:.55 },
+    hombreraCerca: { file:"parte-hombrera-cerca-v4.png",  box:[357,321,341,351], w:11,   ax:.50, ay:.30 },
+    hombreraLejos: { file:"parte-hombrera-lejos-v4.png",  box:[395,368,238,231], w:8.5,  ax:.50, ay:.30 },
+    // Capa v6: perfil estrecho. El ancla es el broche del hombro.
+    capa:          { file:"parte-capa-v6.png",            box:[352,93,269,781],  h:26,   ax:.79, ay:.06 },
+    musloCerca:    { file:"parte-pierna-cerca-v3.png",    box:[381,78,299,362],  h:15,   ax:.50, ay:.04 },
+    grebaCerca:    { file:"parte-pierna-cerca-v3.png",    box:[381,440,299,304], h:12.5, ax:.50, ay:.05 },
+    botaCerca:     { file:"parte-pierna-cerca-v3.png",    box:[381,744,299,155], h:6.5,  ax:.50, ay:.06 },
+    musloLejos:    { file:"parte-pierna-lejos-v3.png",    box:[397,69,269,388],  h:15,   ax:.50, ay:.04 },
+    grebaLejos:    { file:"parte-pierna-lejos-v3.png",    box:[397,457,269,326], h:12.5, ax:.50, ay:.05 },
+    botaLejos:     { file:"parte-pierna-lejos-v3.png",    box:[397,783,269,166], h:6.5,  ax:.50, ay:.06 },
+  },
+};
+const clone = (o) => JSON.parse(JSON.stringify(o));
+let CFG = clone(DEFAULT);
+
+// Carga de imágenes (compartiendo las que repiten archivo).
+const imgs = {};
+function loadImages() {
+  for (const k in CFG.parts) {
+    const f = CFG.parts[k].file;
+    if (imgs[f]) continue;
+    const im = new Image();
+    im.src = "/sprites/" + f;
+    imgs[f] = im;
+  }
+}
+loadImages();
+
+// ---------------------------------------------------------------------
+// Rig: mismos ángulos y misma convención que caballero.html.
+const rig = { lean:.05, crouch:0, bob:0, hipF:.07, kneeF:.14, ankleF:0,
+  hipB:-.07, kneeB:.14, ankleB:0, shF:-.2, elF:-.4, shB:-.1, elB:-1.15,
+  head:.02, grip:1.35, wing:0, slide:0 };
+const clamp = (v,a,b) => v<a?a:v>b?b:v;
+const approach = (c,t,r,dt) => c + (t-c)*(1-Math.exp(-r*dt));
+let mode = "idle", t = 0, ph = 0, attack = 0;
+
+function updateRig(dt) {
+  t += dt;
+  const run = mode === "run";
+  const air = mode === "rise" || mode === "fall" || mode === "wings";
+  const slide = mode === "dash";
+  ph += dt * (run ? 10 : 6);
+  attack = mode === "attack" ? (attack <= 0 ? .42 : attack - dt) : 0;
+
+  let lean=.05, crouch=0, hipF=.07, kneeF=.14, hipB=-.07, kneeB=.14;
+  let shF=-.2, elF=-.4, shB=-.1, elB=-1.15, head=.02, grip=1.35;
+
+  if (!slide && !air && !run) {
+    const br = Math.sin(t*2.2);
+    crouch = .04 + br*.03; head += br*.04; shF += br*.05; shB -= br*.05; lean += br*.02;
+  }
+  if (slide) {
+    // Derrape. El personaje mira a +x, y en esta convencion una cadera
+    // NEGATIVA lanza el muslo hacia +x. Por eso hipF/hipB van negativos:
+    // las dos piernas salen hacia la direccion del derrape y son ellas
+    // las que van delante. La pierna cercana va casi estirada (kneeF
+    // pequeno) y es la que lidera; la lejana va plegada (kneeB grande)
+    // con la rodilla adelante y el pie recogido bajo la cadera, lo que
+    // ademas baja la pelvis y deja el cuerpo tumbado atras.
+    crouch=.62; lean=-.70; hipF=-1.05; kneeF=.10; hipB=-1.15; kneeB=2.30;
+    shF=-.85; elF=-.50; shB=.55; elB=-.85; head=-.25;
+  } else if (air) {
+    const rising = mode === "rise" || mode === "wings";
+    lean = rising ? .13 : -.03;
+    hipF = rising ? .66 : .38; kneeF = rising ? 1 : .5;
+    hipB = rising ? -.3 : -.52; kneeB = rising ? .6 : 1;
+    shF = rising ? -.75 : .15; elF=-.5; shB=-.05; elB=-1.1;
+    head = rising ? -.07 : .06;
+  } else if (run) {
+    const s = Math.sin(ph);
+    lean=.17; hipF=.5*s; kneeF=.65-.4*s; hipB=-.5*s; kneeB=.65+.4*s;
+    shF = -.2-.34*s; elF = -.4-.18*(.5+.5*Math.cos(ph)); shB = -.1+.1*s;
+    elB=-1.15; head=.05;
+  }
+  if (attack > 0) {
+    // Espadazo en 3 fases sobre k0 (0..1):
+    //  0.00-0.22  anticipacion: arma atras y arriba, torso rota, ligera
+    //             flexion de piernas para cargar el golpe.
+    //  0.22-0.55  golpe: arco rapido y amplio hacia adelante-abajo, el
+    //             brazo se extiende (codo casi recto) en el pico.
+    //  0.55-1.00  follow-through: el brazo baja y se frenan los angulos.
+    const k0 = clamp(1-attack/.42, 0, 1);
+    if (k0 < .22) {
+      const a=k0/.22, e=Math.sin(a*Math.PI*.5);
+      shF=.4+a*1.25; elF=-.5-a*.95; lean-=a*.18; head-=a*.12;
+      shB+=a*.35; crouch=Math.max(crouch,a*.2); kneeF+=a*.22; kneeB+=a*.18;
+    } else if (k0 < .55) {
+      const k=(k0-.22)/.33, e=Math.sin(k*Math.PI);
+      shF=1.65-k*3.0; elF=-1.45+k*1.25; lean+=.26*e; head+=.16*e;
+      crouch=Math.max(crouch,.16*e); kneeF+=.3*e; grip=.35+k*.4;
+    } else {
+      const k=(k0-.55)/.45;
+      shF=-1.35+k*.55; elF=-.2-k*.35; lean-=(1-k)*.1; head-=(1-k)*.04;
+      grip=1.35-(1-k)*.6;
+    }
+  }
+
+  const r = 17;
+  // En el derrape las piernas llegan a su pose mucho antes que el tronco:
+  // se disparan hacia la direccion del deslizamiento y el resto del cuerpo
+  // las sigue, arrastrado. Fuera del derrape todo va al mismo ritmo.
+  const rLeg = slide ? 30 : r, rBody = slide ? 7 : r;
+  rig.lean=approach(rig.lean,lean,rBody,dt); rig.crouch=approach(rig.crouch,crouch,slide?26:13,dt);
+  rig.hipF=approach(rig.hipF,hipF,rLeg,dt); rig.kneeF=approach(rig.kneeF,kneeF,rLeg,dt);
+  rig.hipB=approach(rig.hipB,hipB,rLeg,dt); rig.kneeB=approach(rig.kneeB,kneeB,rLeg,dt);
+  rig.shF=approach(rig.shF,shF,attack>0?34:rBody,dt); rig.elF=approach(rig.elF,elF,attack>0?34:rBody,dt);
+  rig.shB=approach(rig.shB,shB,rBody,dt); rig.elB=approach(rig.elB,elB,rBody,dt);
+  rig.head=approach(rig.head,head,slide?7:12,dt);
+  rig.slide=approach(rig.slide,slide?1:0,slide?7:14,dt);
+  rig.grip=approach(rig.grip,grip,26,dt);
+  rig.ankleF=approach(rig.ankleF,clamp(-(rig.hipF+rig.kneeF)*.55,-.5,.5),rLeg,dt);
+  rig.ankleB=approach(rig.ankleB,clamp(-(rig.hipB+rig.kneeB)*.55,-.5,.5),rLeg,dt);
+  rig.bob = run ? Math.abs(Math.sin(ph))*1.5 : Math.sin(t*3)*.4;
+  rig.wing = approach(rig.wing, mode === "wings" ? 1 : 0, 9, dt);
+}
+
+let capeAng = .3, capeVel = 0;
+function updateCape(dt) {
+  const wind = mode==="run" ? .5 : mode==="dash" ? 1.1 : .16;
+  const tg = .30 + rig.lean*.5 + Math.sin(t*2.3)*wind*.32;
+  capeVel += (tg-capeAng)*26*dt; capeVel *= Math.exp(-6*dt); capeAng += capeVel*dt;
+}
+
+// ---------------------------------------------------------------------
+// Geometría: se recalcula cada frame y sirve tanto para dibujar como para
+// saber dónde está cada punto arrastrable.
+const rot = (a,x,y) => [x*Math.cos(a)-y*Math.sin(a), x*Math.sin(a)+y*Math.cos(a)];
+const add = (p,q) => [p[0]+q[0], p[1]+q[1]];
+let G = {};
+function solve() {
+  const B = CFG.bones, P = CFG.points;
+  const reach = (h,k) => B.THIGH*Math.cos(h) + B.SHIN*Math.cos(h+k) + 2.6;
+  const grounded = !(mode==="rise" || mode==="fall" || mode==="wings");
+  const pelvisY = grounded
+    ? -Math.max(reach(rig.hipF,rig.kneeF), reach(rig.hipB,rig.kneeB))
+    : -30 + rig.bob*.4;
+  const torsoY = pelvisY - 3;
+  // En el derrape el tronco se retrasa respecto a las caderas: las piernas
+  // van delante y el cuerpo queda colgando detras.
+  const torsoX = -rig.slide * 3.5;
+  const torsoPt = (x,y) => add([torsoX,torsoY], rot(rig.lean,x,y));
+
+  const legOf = (pt,hip,knee,ank) => {
+    const h = [pt.x, pelvisY + pt.y];
+    const k = add(h, rot(hip,0,B.THIGH));
+    const a = add(k, rot(hip+knee,0,B.SHIN));
+    return { hip:h, knee:k, ankle:a, toe:add(a, rot(hip+knee+ank,0,5)) };
+  };
+  const armOf = (pt,sh,el) => {
+    const s = torsoPt(pt.x, pt.y);
+    const e = add(s, rot(rig.lean+sh,0,B.UPPER_ARM));
+    return { shoulder:s, elbow:e, hand:add(e, rot(rig.lean+sh+el,0,B.FOREARM)) };
+  };
+
+  const legF = legOf(P.hipF, rig.hipF, rig.kneeF, rig.ankleF);
+  const legB = legOf(P.hipB, rig.hipB, rig.kneeB, rig.ankleB);
+  const armF = armOf(P.shoulderF, rig.shF, rig.elF);
+  const armB = armOf(P.shoulderB, rig.shB, rig.elB);
+
+  // Ángulos con que se colocan el arma y el escudo dentro de la mano.
+  const swordA = rig.lean + rig.shF + rig.elF;
+  const shieldA = rig.lean + .12;
+  const shieldBase = add(armB.hand, rot(rig.lean+rig.shB+rig.elB, 0, -B.FOREARM*.45));
+
+  G = { pelvisY, torsoX, torsoY, torsoPt, legF, legB, armF, armB, swordA, shieldA, shieldBase,
+    world: {
+      hipF: legF.hip, hipB: legB.hip,
+      shoulderF: armF.shoulder, shoulderB: armB.shoulder,
+      pauldronF: torsoPt(P.pauldronF.x, P.pauldronF.y),
+      pauldronB: torsoPt(P.pauldronB.x, P.pauldronB.y),
+      coraza: torsoPt(P.coraza.x, P.coraza.y),
+      head: torsoPt(P.head.x, P.head.y),
+      wing: torsoPt(P.wing.x, P.wing.y),
+      cape: torsoPt(P.cape.x, P.cape.y),
+      sword: add(armF.hand, rot(swordA, P.sword.x, P.sword.y)),
+      shield: add(shieldBase, rot(shieldA, P.shield.x, P.shield.y)),
+    },
+    // Rotación acumulada del espacio local de cada punto: se usa para
+    // convertir el arrastre del ratón a coordenadas locales.
+    localAngle: {
+      hipF:0, hipB:0,
+      shoulderF: rig.lean, shoulderB: rig.lean, pauldronF: rig.lean,
+      pauldronB: rig.lean, coraza: rig.lean, head: rig.lean,
+      wing: rig.lean, cape: rig.lean,
+      sword: swordA, shield: shieldA,
+    } };
+}
+
+// ---------------------------------------------------------------------
+// Dibujo de piezas.
+let showBoxes = false, hitList = [];
+function part(key, dim) {
+  const p = CFG.parts[key], im = imgs[p.file];
+  if (!im || !im.complete || !im.naturalWidth) return;
+  const [sx,sy,sw,sh] = p.box;
+  // Escala editable: scaleX/scaleY multiplican el ancho/alto. Por defecto 1.
+  const sx_ = p.scaleX != null ? p.scaleX : 1;
+  const sy_ = p.scaleY != null ? p.scaleY : 1;
+  const dw = (p.w != null ? p.w : p.h*sw/sh) * sx_;
+  const dh = (p.h != null ? p.h : p.w*sh/sw) * sy_;
+  const dx = -p.ax*dw, dy = -p.ay*dh;
+  ctx.save();
+  // Rotación editable de la pieza (en radianes). Se aplica sobre
+  // su centro (ancla), despues de la translacion del ancla.
+  if (p.rot) ctx.rotate(p.rot);
+  if (dim) ctx.filter = `brightness(${(1-dim*.45).toFixed(3)}) saturate(${(1-dim*.35).toFixed(3)})`;
+  // Volteo horizontal para piezas lejanas vistas desde atras.
+  if (p.flip) ctx.scale(-1, 1);
+  const fx = p.flip ? -(dx + dw) : dx;
+  ctx.drawImage(im, sx,sy,sw,sh, fx,dy,dw,dh);
+  ctx.restore();
+  if (showBoxes || selPart === key) {
+    ctx.save();
+    ctx.strokeStyle = selPart === key ? "rgba(255,215,94,.9)" : "rgba(120,220,255,.5)";
+    ctx.lineWidth = selPart === key ? .5 : .25;
+    ctx.strokeRect(fx,dy,dw,dh);
+    ctx.restore();
+  }
+  // Guarda la caja en pantalla para poder seleccionar la pieza con un clic.
+  const m = ctx.getTransform();
+  hitList.push({ key, m, dx: p.flip ? -dx-dw : dx, dy, dw, dh });
+}
+
+function leg(front) {
+  const B = CFG.bones, dim = front ? 0 : .34;
+  const hip = front?rig.hipF:rig.hipB, knee = front?rig.kneeF:rig.kneeB, ank = front?rig.ankleF:rig.ankleB;
+  ctx.save(); ctx.rotate(hip);
+  part(front?"musloCerca":"musloLejos", dim);
+  ctx.translate(0,B.THIGH); ctx.rotate(knee);
+  part(front?"grebaCerca":"grebaLejos", dim);
+  ctx.translate(0,B.SHIN); ctx.rotate(ank);
+  part(front?"botaCerca":"botaLejos", dim);
+  ctx.restore();
+}
+function arm(sh, el, dim, hand, far) {
+  const B = CFG.bones;
+  ctx.save(); ctx.rotate(sh);
+  part(far?"brazoLejos":"brazo", dim);
+  ctx.translate(0,B.UPPER_ARM); ctx.rotate(el);
+  part(far?"antebrazoLejos":"antebrazo", dim);
+  ctx.translate(0,B.FOREARM);
+  if (hand) hand();
+  ctx.restore();
+}
+function wing(far) {
+  const a = rig.wing;
+  if (a < .02) return;
+  const P = CFG.points.wing;
+  const beat = Math.sin(t*6)*.28;
+  ctx.save();
+  ctx.translate(P.x, P.y);
+  ctx.rotate(-.22 + beat + (far?.22:0));
+  ctx.globalAlpha = a*(far?.72:1);
+  // Alas mas grandes: escala global aumentada.
+  const WS = far ? 1.25 : 1.55;
+  ctx.scale(WS, WS);
+  ctx.save(); ctx.globalCompositeOperation="screen";
+  const hg = ctx.createRadialGradient(-18,-14,1,-18,-14,52);
+  hg.addColorStop(0,"rgba(255,246,214,.45)"); hg.addColorStop(1,"rgba(255,214,120,0)");
+  ctx.fillStyle=hg; ctx.fillRect(-78,-64,110,110); ctx.restore();
+  // Plumas primarias (largas, abajo) + secundarias (cortas, arriba).
+  // 4 filas x 7 plumas, mas largas y mas densas que antes.
+  for (let r=0;r<4;r++) for (let i=0;i<7;i++) {
+    const k=i/6, len=26-r*4-k*6;
+    ctx.save();
+    ctx.translate(-1-k*4, 4+r*2.6-k*(9+r*1.4));
+    ctx.rotate(-1.0-k*0.7-r*0.12);
+    const g2=ctx.createLinearGradient(0,0,len,0);
+    g2.addColorStop(0, far?"#c9b8e8":"#fff8e8"); g2.addColorStop(.5,"#ece0fa");
+    g2.addColorStop(1,"rgba(214,202,250,0)");
+    ctx.fillStyle=g2; ctx.beginPath(); ctx.moveTo(0,-2.4);
+    ctx.quadraticCurveTo(len*.5,-4.2,len,-1.2); ctx.quadraticCurveTo(len*.5,1.8,0,2.4);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle="rgba(170,160,215,.4)"; ctx.lineWidth=.28; ctx.stroke();
+    // Raquis (linea central de la pluma) para dar detalle.
+    ctx.strokeStyle="rgba(150,138,200,.3)"; ctx.lineWidth=.18;
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(len*.5,-1.2,len,-.4); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// Guantelete vectorial: se dibuja en el espacio de la mano para que se vea
+// que la mano agarra el arma o el escudo (los sprites de antebrazo lejano
+// no traen guante).
+function gauntlet(dim) {
+  ctx.save();
+  if (dim) ctx.filter = `brightness(${(1-dim*.45).toFixed(3)}) saturate(${(1-dim*.35).toFixed(3)})`;
+  const g = ctx.createLinearGradient(-2.3,-1.4, 2.3, 4);
+  g.addColorStop(0,"#eef1f7"); g.addColorStop(.45,"#bcc5d4"); g.addColorStop(1,"#7c8695");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.roundRect(-2.3,-1.4, 4.6, 5.3, 1.6); ctx.fill();
+  ctx.strokeStyle="rgba(58,64,78,.6)"; ctx.lineWidth=.3; ctx.stroke();
+  // Lamas de los nudillos.
+  ctx.strokeStyle="rgba(68,76,92,.5)"; ctx.lineWidth=.26;
+  for (let i=0;i<3;i++) {
+    const y = .15 + i*1.2;
+    ctx.beginPath(); ctx.moveTo(-1.9,y); ctx.lineTo(1.9,y); ctx.stroke();
+  }
+  // Pulgar cerrado por delante.
+  ctx.fillStyle="#ccd4e1";
+  ctx.beginPath(); ctx.ellipse(1.5,1.4,.85,1.9,-.35,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle="rgba(58,64,78,.5)"; ctx.lineWidth=.24; ctx.stroke();
+  ctx.fillStyle="rgba(255,255,255,.3)";
+  ctx.beginPath(); ctx.ellipse(-.9,.1,1.05,.65,-.4,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawKnight() {
+  const P = CFG.points, B = CFG.bones;
+  ctx.save(); ctx.translate(G.torsoX,G.torsoY); ctx.rotate(rig.lean);
+  wing(true);
+  ctx.save(); ctx.translate(P.cape.x, P.cape.y); ctx.rotate(capeAng*.6); part("capa",0); ctx.restore();
+  wing(false);
+  ctx.restore();
+
+  ctx.save(); ctx.translate(P.hipB.x, G.pelvisY+P.hipB.y); leg(false); ctx.restore();
+  ctx.save(); ctx.translate(P.hipF.x, G.pelvisY+P.hipF.y); leg(true);  ctx.restore();
+
+  ctx.save(); ctx.translate(G.torsoX,G.torsoY); ctx.rotate(rig.lean);
+
+  ctx.save(); ctx.translate(P.pauldronB.x, P.pauldronB.y); part("hombreraLejos",.34); ctx.restore();
+  ctx.save(); ctx.translate(P.shoulderB.x, P.shoulderB.y);
+  // Escudo al fondo de todo el brazo: se dibuja primero, con la
+  // transformacion completa hasta la mano, y luego el brazo encima.
+  ctx.save();
+  ctx.rotate(rig.shB);
+  ctx.translate(0, B.UPPER_ARM); ctx.rotate(rig.elB);
+  ctx.translate(0, B.FOREARM);
+  ctx.translate(0, -B.FOREARM*.45);
+  ctx.rotate(-(rig.shB+rig.elB)+.12);
+  ctx.translate(P.shield.x, P.shield.y);
+  part("escudo",0);
+  ctx.restore();
+  // El guantelete va DESPUES del brazo, encima del escudo: se lee como la
+  // mano cerrada sobre la embrazadura.
+  arm(rig.shB, rig.elB, .3, () => gauntlet(.3), true);
+  ctx.restore();
+
+  ctx.save(); ctx.translate(P.coraza.x, P.coraza.y); part("coraza",0); ctx.restore();
+
+  ctx.save();
+  ctx.translate(P.head.x, P.head.y); ctx.rotate(rig.head);
+  ctx.fillStyle="#d79c76";
+  ctx.beginPath(); ctx.roundRect(-2.6,2,5.6,7,2); ctx.fill();
+  part("cabeza",0);
+  ctx.restore();
+
+  ctx.save(); ctx.translate(P.shoulderF.x, P.shoulderF.y);
+  // Espada por DETRAS del brazo: se dibuja primero recorriendo la cadena
+  // hombro-codo-mano, y luego el brazo encima. Asi el guantelete del
+  // antebrazo tapa la empunadura y se lee como que la mano la sostiene.
+  ctx.save();
+  ctx.rotate(rig.shF);
+  ctx.translate(0, B.UPPER_ARM); ctx.rotate(rig.elF);
+  ctx.translate(0, B.FOREARM);
+  ctx.translate(P.sword.x, P.sword.y); ctx.rotate(rig.grip);
+  part("espada",0);
+  ctx.restore();
+  arm(rig.shF, rig.elF, 0, null, false);
+  ctx.restore();
+
+  ctx.save(); ctx.translate(P.pauldronF.x, P.pauldronF.y); part("hombreraCerca",0); ctx.restore();
+  ctx.restore();
+}
+
+function drawSkeleton() {
+  const bone = (a,b,c) => { ctx.strokeStyle=c; ctx.lineWidth=.5; ctx.lineCap="round";
+    ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke(); };
+  const L = G.legB, F = G.legF, AB = G.armB, AF = G.armF;
+  bone([0,G.pelvisY], G.torsoPt(0,SH_Y), "#ff8f5e");
+  bone(G.torsoPt(0,SH_Y), G.world.head, "#ff8f5e");
+  bone([0,G.pelvisY], L.hip, "#ff8f5e"); bone([0,G.pelvisY], F.hip, "#ff8f5e");
+  for (const [c,k] of [["#8f7fd8",L],["#ff6060",F]]) {
+    bone(k.hip,k.knee,c); bone(k.knee,k.ankle,c); bone(k.ankle,k.toe,c);
+  }
+  for (const [c,a] of [["#8f7fd8",AB],["#ff6060",AF]]) {
+    bone(a.shoulder,a.elbow,c); bone(a.elbow,a.hand,c);
+  }
+  ctx.fillStyle="#ffd75e";
+  for (const p of [L.knee,L.ankle,F.knee,F.ankle,AB.elbow,AB.hand,AF.elbow,AF.hand,[0,G.pelvisY]]) {
+    ctx.beginPath(); ctx.arc(p[0],p[1],.7,0,7); ctx.fill();
+  }
+}
+
+// ---------------------------------------------------------------------
+// Escena y mapeo pantalla <-> rig.
+let zoom = 9, view = { ox:0, oy:0, z:9 };
+function drawHandles() {
+  ctx.save(); ctx.setTransform(1,0,0,1,0,0);
+  for (const key in CFG.points) {
+    const w = G.world[key];
+    if (!w) continue;
+    const x = view.ox + w[0]*view.z, y = view.oy + w[1]*view.z;
+    const on = key === dragKey || key === hoverKey;
+    ctx.beginPath(); ctx.arc(x,y, on?8:6, 0, 7);
+    ctx.fillStyle = on ? "#fff3cf" : "rgba(255,215,94,.92)";
+    ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = "#2a2010"; ctx.stroke();
+    if (on) {
+      ctx.font="600 12px system-ui"; ctx.textBaseline="middle";
+      const lbl = CFG.points[key].label;
+      const tw = ctx.measureText(lbl).width;
+      const lx = x + 12, ly = y - 13;
+      ctx.fillStyle="rgba(10,8,16,.9)"; ctx.fillRect(lx-4,ly-9,tw+8,18);
+      ctx.fillStyle="#fff3cf"; ctx.textAlign="left"; ctx.fillText(lbl, lx, ly);
+    }
+  }
+  ctx.restore();
+}
+
+function frame(ts) {
+  let dt = frame.last ? (ts-frame.last)/1000 : .016;
+  frame.last = ts;
+  if (dt > .05) dt = .05;
+  if (!document.getElementById("tPause").checked) { updateRig(dt); updateCape(dt); }
+  solve();
+
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,CW,CH);
+  const groundY = CH*.86;
+  ctx.fillStyle="rgba(60,52,78,.5)"; ctx.fillRect(0,groundY,CW,CH-groundY);
+  ctx.strokeStyle="rgba(120,108,150,.3)"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,groundY); ctx.lineTo(CW,groundY); ctx.stroke();
+
+  view = { ox: CW*.46, oy: groundY, z: zoom };
+  hitList = [];
+  ctx.save();
+  ctx.translate(view.ox, view.oy); ctx.scale(zoom, zoom);
+  if (mode==="rise"||mode==="fall"||mode==="wings") ctx.translate(0,-3);
+  if (document.getElementById("tSprites").checked) drawKnight();
+  if (document.getElementById("tSkel").checked) drawSkeleton();
+  ctx.restore();
+  if (document.getElementById("tHandles").checked) drawHandles();
+
+  requestAnimationFrame(frame);
+}
+
+// ---------------------------------------------------------------------
+// Arrastre de los puntos.
+let dragKey = null, hoverKey = null, dragStart = null;
+function toCanvas(ev) {
+  const r = cv.getBoundingClientRect();
+  return [ (ev.clientX-r.left) * (CW/r.width), (ev.clientY-r.top) * (CH/r.height) ];
+}
+function pick(px,py) {
+  let best = null, bd = 13*13;
+  for (const key in CFG.points) {
+    const w = G.world[key];
+    if (!w) continue;
+    const x = view.ox + w[0]*view.z, y = view.oy + w[1]*view.z;
+    const d = (x-px)*(x-px) + (y-py)*(y-py);
+    if (d < bd) { bd = d; best = key; }
+  }
+  return best;
+}
+function pickPart(px,py) {
+  // Recorre al revés: la última pieza dibujada es la de encima.
+  for (let i = hitList.length-1; i >= 0; i--) {
+    const h = hitList[i];
+    const det = h.m.a*h.m.d - h.m.b*h.m.c;
+    if (!det) continue;
+    const dx = px - h.m.e, dy = py - h.m.f;
+    const lx = ( h.m.d*dx - h.m.c*dy) / det;
+    const ly = (-h.m.b*dx + h.m.a*dy) / det;
+    if (lx >= h.dx && lx <= h.dx+h.dw && ly >= h.dy && ly <= h.dy+h.dh) return h.key;
+  }
+  return null;
+}
+cv.addEventListener("pointerdown", (ev) => {
+  const [px,py] = toCanvas(ev);
+  const k = document.getElementById("tHandles").checked ? pick(px,py) : null;
+  if (k) {
+    dragKey = k; dragStart = [px,py];
+    cv.classList.add("drag"); cv.setPointerCapture(ev.pointerId);
+    highlightRow(k);
+  } else {
+    const p = pickPart(px,py);
+    if (p) selectPart(p);
+  }
+});
+cv.addEventListener("pointermove", (ev) => {
+  const [px,py] = toCanvas(ev);
+  if (!dragKey) { hoverKey = pick(px,py); return; }
+  const dxs = (px - dragStart[0]) / view.z;
+  const dys = (py - dragStart[1]) / view.z;
+  dragStart = [px,py];
+  // El punto vive en un espacio girado: se deshace esa rotación.
+  const a = -(G.localAngle[dragKey] || 0);
+  const P = CFG.points[dragKey];
+  P.x += dxs*Math.cos(a) - dys*Math.sin(a);
+  P.y += dxs*Math.sin(a) + dys*Math.cos(a);
+  syncInputs(dragKey);
+});
+const endDrag = () => { dragKey = null; cv.classList.remove("drag"); };
+cv.addEventListener("pointerup", endDrag);
+cv.addEventListener("pointercancel", endDrag);
+
+// ---------------------------------------------------------------------
+// Panel.
+const pointsBox = document.getElementById("points");
+const inputs = {};
+function buildPoints() {
+  pointsBox.innerHTML = "";
+  for (const key in CFG.points) {
+    const P = CFG.points[key];
+    const row = document.createElement("div");
+    row.className = "row"; row.dataset.key = key;
+    row.innerHTML = `<label title="${key}">${P.label}</label>
+      <input type="number" step=".1" value="${P.x.toFixed(2)}">
+      <input type="number" step=".1" value="${P.y.toFixed(2)}">`;
+    const [ix,iy] = row.querySelectorAll("input");
+    ix.oninput = () => { P.x = parseFloat(ix.value)||0; };
+    iy.oninput = () => { P.y = parseFloat(iy.value)||0; };
+    row.querySelector("label").onclick = () => highlightRow(key);
+    pointsBox.appendChild(row);
+    inputs[key] = [ix,iy];
+  }
+}
+function syncInputs(key) {
+  const P = CFG.points[key], i = inputs[key];
+  if (!i) return;
+  i[0].value = P.x.toFixed(2); i[1].value = P.y.toFixed(2);
+}
+function highlightRow(key) {
+  for (const r of pointsBox.children) r.classList.toggle("sel", r.dataset.key === key);
+  hoverKey = key;
+}
+
+const bonesBox = document.getElementById("bones");
+function buildBones() {
+  bonesBox.innerHTML = "";
+  for (const k in CFG.bones) {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML = `<label>${k}</label>
+      <input type="number" step=".5" value="${CFG.bones[k]}"><span></span>`;
+    const inp = row.querySelector("input");
+    inp.oninput = () => { CFG.bones[k] = parseFloat(inp.value) || 1; };
+    bonesBox.appendChild(row);
+  }
+}
+
+let selPart = null;
+const partBox = document.getElementById("partSel");
+function selectPart(key) {
+  selPart = key;
+  const p = CFG.parts[key];
+  const sizeKey = p.w != null ? "w" : "h";
+  document.getElementById("partHint").textContent = p.file;
+  partBox.innerHTML = `
+    <div class="row"><label>${key}</label><span></span><span></span></div>
+    <div class="row"><label>ancla X</label><input type="number" step=".01" id="pax" value="${p.ax}"><span></span></div>
+    <div class="row"><label>ancla Y</label><input type="number" step=".01" id="pay" value="${p.ay}"><span></span></div>
+    <div class="row"><label>tamaño ${sizeKey}</label><input type="number" step=".5" id="psz" value="${p[sizeKey]}"><span></span></div>
+    <div class="row"><label>escala X</label><input type="number" step=".05" id="psx" value="${p.scaleX != null ? p.scaleX : 1}"><span></span></div>
+    <div class="row"><label>escala y</label><input type="number" step=".05" id="psy" value="${p.scaleY != null ? p.scaleY : 1}"><span></span></div>
+    <div class="row"><label>rotación (°)</label><input type="number" step="1" id="prot" value="${p.rot != null ? +(p.rot*180/Math.PI).toFixed(1) : 0}"><span></span></div>
+    <div class="row"><label>voltear</label><input type="checkbox" id="pflip" ${p.flip ? "checked" : ""}><span></span></div>`;
+  document.getElementById("pax").oninput = (e) => { p.ax = parseFloat(e.target.value)||0; };
+  document.getElementById("pay").oninput = (e) => { p.ay = parseFloat(e.target.value)||0; };
+  document.getElementById("psz").oninput = (e) => { p[sizeKey] = parseFloat(e.target.value)||1; };
+  document.getElementById("psx").oninput = (e) => { p.scaleX = parseFloat(e.target.value)||1; };
+  document.getElementById("psy").oninput = (e) => { p.scaleY = parseFloat(e.target.value)||1; };
+  document.getElementById("prot").oninput = (e) => { p.rot = parseFloat(e.target.value||0) * Math.PI/180; };
+  document.getElementById("pflip").onchange = (e) => { p.flip = e.target.checked; };
+}
+
+const MODES = [["idle","reposo"],["run","correr"],["rise","salto"],["fall","caída"],
+  ["wings","alas"],["attack","espadazo"],["dash","derrape"]];
+const posesBar = document.getElementById("poses");
+const mbtn = {};
+for (const [id,label] of MODES) {
+  const b = document.createElement("button");
+  b.textContent = label;
+  b.onclick = () => { mode=id; ph=0; attack=0;
+    for (const k in mbtn) mbtn[k].classList.toggle("on", k===id); };
+  posesBar.appendChild(b); mbtn[id]=b;
+}
+mbtn.idle.classList.add("on");
+
+document.getElementById("tBoxes").onchange = (e) => showBoxes = e.target.checked;
+const zEl = document.getElementById("zoom");
+zEl.oninput = () => { zoom = parseFloat(zEl.value); document.getElementById("zoomV").textContent = zEl.value; };
+
+const msg = document.getElementById("msg");
+document.getElementById("save").onclick = async () => {
+  const out = { bones: CFG.bones, points: {}, parts: {} };
+  for (const k in CFG.points) {
+    const P = CFG.points[k];
+    out.points[k] = { x:+P.x.toFixed(3), y:+P.y.toFixed(3) };
+  }
+  for (const k in CFG.parts) {
+    const p = CFG.parts[k];
+    out.parts[k] = { file:p.file, ax:p.ax, ay:p.ay };
+    if (p.w != null) out.parts[k].w = p.w;
+    if (p.h != null) out.parts[k].h = p.h;
+    if (p.scaleX != null) out.parts[k].scaleX = p.scaleX;
+    if (p.scaleY != null) out.parts[k].scaleY = p.scaleY;
+    if (p.rot != null) out.parts[k].rot = p.rot;
+    if (p.flip) out.parts[k].flip = true;
+  }
+  try {
+    const r = await fetch("/guardar-rig", { method:"POST",
+      headers:{"Content-Type":"application/json"}, body: JSON.stringify(out,null,2) });
+    const j = await r.json();
+    msg.style.color = j.ok ? "#a8f0c0" : "#ff9a9a";
+    msg.textContent = j.ok ? "Guardado en preview/rig-ajustado.json" : ("Error: " + j.error);
+  } catch (e) { msg.style.color="#ff9a9a"; msg.textContent = "No se pudo guardar: " + e.message; }
+};
+document.getElementById("reset").onclick = () => {
+  CFG = clone(DEFAULT); loadImages(); buildPoints(); buildBones();
+  selPart = null; partBox.innerHTML = "";
+  msg.style.color="#bbb2c7"; msg.textContent = "Valores originales restaurados.";
+};
+
+buildPoints(); buildBones();
+requestAnimationFrame(frame);
+
+// Al abrir, carga los ajustes guardados por el usuario (rig-ajustado.json)
+// y los aplica sobre CFG, reconstruyendo la UI para que los campos muestren
+// los valores guardados. Si no existe, se queda con DEFAULT.
+(async () => {
+  try {
+    const r = await fetch("rig-ajustado.json?cache=" + Date.now());
+    if (!r.ok) return;
+    const cfg = await r.json();
+    if (!cfg) return;
+    // Huesos
+    if (cfg.bones) for (const k in cfg.bones) if (CFG.bones[k] != null) CFG.bones[k] = cfg.bones[k];
+    // Puntos (posiciones de las articulaciones)
+    if (cfg.points) for (const k in cfg.points) {
+      if (!CFG.points[k]) continue;
+      CFG.points[k].x = cfg.points[k].x;
+      CFG.points[k].y = cfg.points[k].y;
+    }
+    // Partes (ancla, tamaño, escala, rotacion, volteo)
+    if (cfg.parts) for (const k in cfg.parts) {
+      const src = cfg.parts[k], dst = CFG.parts[k];
+      if (!dst || !src) continue;
+      if (src.ax != null) dst.ax = src.ax;
+      if (src.ay != null) dst.ay = src.ay;
+      if (src.w != null) dst.w = src.w;
+      if (src.h != null) dst.h = src.h;
+      if (src.scaleX != null) dst.scaleX = src.scaleX;
+      if (src.scaleY != null) dst.scaleY = src.scaleY;
+      if (src.rot != null) dst.rot = src.rot;
+      if (src.flip != null) dst.flip = src.flip;
+    }
+    // Reconstruye la UI con los valores cargados.
+    buildPoints(); buildBones();
+    if (selPart) selectPart(selPart);
+    msg.style.color = "#a8f0c0";
+    msg.textContent = "Ajustes guardados cargados.";
+  } catch (e) { /* no hay config guardada todavía */ }
+})();
+</script>
+</body>
+</html>

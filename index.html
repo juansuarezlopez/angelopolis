@@ -41,7 +41,10 @@
       <div class="cluster right">
         <div class="stack">
           <button type="button" class="btn cross" id="btn-cross" data-action="cross" aria-label="Lanzar cruz y exorcizar">✝<span>exorcizar</span></button>
-          <button type="button" class="btn attack" data-action="attack" aria-label="Atacar">⚔</button>
+          <div class="row">
+            <button type="button" class="btn attack" data-action="attack" aria-label="Atacar">⚔</button>
+            <button type="button" class="btn prayer" id="btn-prayer" data-action="prayer" aria-label="Rezar para recuperar maná">🙏<span>oración</span></button>
+          </div>
         </div>
         <button type="button" class="btn jump" data-action="jump" aria-label="Saltar">▲<span>salto</span></button>
       </div>
@@ -72,12 +75,13 @@
           <li>Derecha: exorcizar, cortar y saltar</li>
           <li>En el aire, pulsa salto otra vez para desplegar las alas</li>
           <li>Toca dos veces la misma dirección para derrapar y colarte bajo el demonio</li>
-          <li>⚔ la espada hiere el doble que la cruz: úsala de cerca</li>
+          <li>⚔ la espada hiere el triple que la cruz y tiene más alcance: úsala de cerca</li>
           <li>✝ la cruz sale hacia donde mires y busca al demonio más cercano de ese lado</li>
-          <li>Cada cruz gasta maná: la barra azul se recarga sola</li>
+          <li>🙏 oración: reza (arrodillándose) para recuperar el maná; sin rezar no se recarga</li>
+          <li>Cada cruz gasta maná: la barra azul SOLO sube rezando</li>
         </ul>
         <button type="button" class="cta" id="btn-start">Empezar</button>
-        <p class="fine">Teclado: A/D o flechas (doble toque = derrape) · Espacio salto · J espada · K cruz</p>
+        <p class="fine">Teclado: A/D o flechas (doble toque = derrape) · Espacio salto · J espada · K cruz · Q oración</p>
       </div>
 
       <div class="panel" id="panel-dead" hidden>

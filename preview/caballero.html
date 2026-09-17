@@ -50,7 +50,9 @@
 </head>
 <body>
   <h1>Caballero — sprites de IA sobre rig vectorial</h1>
-  <p class="sub">Vista previa. No está implementado en el juego.</p>
+  <p class="sub">Vista previa. No está implementado en el juego. &nbsp;·&nbsp;
+    <a href="/esqueleto.html" style="color:#9fb6ff">esqueleto y montaje</a> &nbsp;·&nbsp;
+    <a href="/partes.html" style="color:#9fb6ff">piezas sueltas</a></p>
 
   <div class="stage"><canvas id="cv" width="900" height="560"></canvas></div>
 
@@ -82,21 +84,46 @@
   const THIGH = 15, SHIN = 12.5, UPPER_ARM = 10, FOREARM = 9;
   const SH_Y = -13, HIP_Y = -30;
 
-  // --- Piezas: recorte en el PNG + tamaño y ancla en el rig ----------
+  // --- Piezas v3: recorte en el PNG + tamaño y ancla en el rig -------
   // box = [sx, sy, sw, sh] del contenido dentro del PNG de 1024.
   // ax/ay = punto de anclaje (0..1) que se pega a la articulación.
+  // Las piernas cercana y lejana son sprites DIFERENTES (perspectiva) y cada
+  // una se recorta en 3 segmentos (muslo/greba/bota) para articular la rodilla.
+  // Pierna cercana: box y:78-899 (h=822). 44% muslo, 37% greba, 19% bota.
+  // Pierna lejana:  box y:69-949 (h=881). 44% muslo, 37% greba, 19% bota.
   const PARTS = {
-    coraza:    { file:"parte-coraza-v2.png", box:[272,92,486,833],  h:30,   ax:.50, ay:.68 },
-    brazo:     { file:"parte-brazo.png",     box:[320,74,323,873],  h:13.5, ax:.50, ay:.06 },
-    antebrazo: { file:"parte-antebrazo.png", box:[379,44,261,937],  h:16.5, ax:.50, ay:.08 },
-    muslo:     { file:"parte-muslo.png",     box:[358,48,324,924],  h:17.5, ax:.50, ay:.05, flip:true, scaleX:1.42 },
-    greba:     { file:"parte-greba.png",     box:[358,78,371,640],  h:15.5, ax:.45, ay:.10, scaleX:1.22 },
-    bota:      { file:"parte-greba.png",     box:[358,700,371,225], h:6.5,  ax:.36, ay:.06, scaleX:1.08 },
-    escudo:    { file:"parte-escudo.png",    box:[188,45,646,898],  h:23,   ax:.50, ay:.50 },
-    espada:    { file:"parte-espada.png",    box:[19,366,985,246],  w:40,   ax:.18, ay:.50 },
-    ala:       { file:"parte-ala.png",       box:[34,100,950,812],  w:46,   ax:.93, ay:.72 },
-    cabeza:    { file:"parte-cabeza.png",    box:[0,20,1024,760],   w:22,   ax:.50, ay:.51 },
-    hombrera:  { file:"parte-hombrera-v2.png", box:[254,247,513,479], w:10, ax:.56, ay:.54 },
+    // Coraza v5: solo torso, de perfil. h=21 y ay=.62 hacen que el borde
+    // superior caiga justo en SH_Y (linea del hombro) y el inferior en la
+    // cintura. Con ese encaje la sisa del sprite queda sobre el hombro
+    // lejano y deja ver la manga que va detras, en vez de parecer un agujero
+    // a media altura del pecho (que era el bug con ay=.42).
+    coraza:       { file:"parte-coraza-v5.png",       box:[345,235,348,540], h:21, ax:.50, ay:.62 },
+    // Brazo cercano (lado de la espada): trae guante en el antebrazo.
+    brazo:        { file:"parte-brazo-cerca-v3.png",  box:[361,173,313,640], h:13.5, ax:.50, ay:.06 },
+    antebrazo:    { file:"parte-antebrazo-cerca-v3.png", box:[375,166,274,639], h:16.5, ax:.50, ay:.08 },
+    // Brazo lejano: brazo cercano volteado (flip) y a escala 0.8, porque el
+    // generador no da pieza vista de atras. Asi se lee como el lado opuesto.
+    brazoLejos:   { file:"parte-brazo-cerca-v3.png",  box:[361,173,313,640], h:13.5, ax:.50, ay:.06, scaleX:.8, scaleY:.8, flip:true },
+    // Antebrazo lejano v6: cortado en la muneca, sin guante.
+    antebrazoLejos:{ file:"parte-antebrazo-lejos-v6.png", box:[362,287,301,437], h:12.5, ax:.50, ay:.08 },
+    // Escudo v6: reverso con correas, visto desde atras.
+    escudo:       { file:"parte-escudo-v6.png",      box:[259,134,505,712], h:23,   ax:.50, ay:.50 },
+    espada:       { file:"parte-espada-v3.png",      box:[49,406,928,192],  w:40,   ax:.18, ay:.50 },
+    cabeza:       { file:"parte-cabeza-v3.png",      box:[148,59,743,887],  w:24,   ax:.50, ay:.55 },
+    hombreraCerca:{ file:"parte-hombrera-cerca-v4.png", box:[357,321,341,351], w:11, ax:.50, ay:.30 },
+    hombreraLejos:{ file:"parte-hombrera-lejos-v4.png", box:[395,368,238,231], w:8.5, ax:.50, ay:.30 },
+    // Capa v6: silueta de PERFIL, estrecha. La v3 era una sabana ancha que de
+    // lado hacia parecer que se veia al caballero desde atras. El ancla es el
+    // broche del hombro, arriba a la derecha del recorte.
+    capa:         { file:"parte-capa-v6.png",        box:[352,93,269,781],  h:26,   ax:.79, ay:.06 },
+    // Pierna CERCANA (cerca del espectador, mayor y más detallada).
+    musloCerca:   { file:"parte-pierna-cerca-v3.png", box:[381,78,299,362],  h:15,   ax:.50, ay:.04 },
+    grebaCerca:   { file:"parte-pierna-cerca-v3.png", box:[381,440,299,304], h:12.5, ax:.50, ay:.05 },
+    botaCerca:    { file:"parte-pierna-cerca-v3.png", box:[381,744,299,155], h:6.5,  ax:.50, ay:.06 },
+    // Pierna LEJANA (detrás, más pequeña y oscura por la perspectiva).
+    musloLejos:   { file:"parte-pierna-lejos-v3.png", box:[397,69,269,388],  h:15,   ax:.50, ay:.04 },
+    grebaLejos:   { file:"parte-pierna-lejos-v3.png", box:[397,457,269,326], h:12.5, ax:.50, ay:.05 },
+    botaLejos:    { file:"parte-pierna-lejos-v3.png", box:[397,783,269,166], h:6.5,  ax:.50, ay:.06 },
   };
 
   let pending = 0, failed = [];
@@ -113,6 +140,31 @@
     p.img = im;
   }
 
+  // Carga los ajustes guardados desde el editor (esqueleto.html) y los
+  // aplica como defaults de cada sprite: ancla, tamaño, escala, rotacion
+  // y volteo. Asi el usuario itera el personaje en el editor, guarda, y
+  // al recargar la animacion (caballero.html) hereda esos valores.
+  (async () => {
+    try {
+      const r = await fetch("rig-ajustado.json?cache=" + Date.now());
+      if (!r.ok) return;
+      const cfg = await r.json();
+      if (!cfg || !cfg.parts) return;
+      for (const k in cfg.parts) {
+        const src = cfg.parts[k], dst = PARTS[k];
+        if (!dst || !src) continue;
+        if (src.ax != null) dst.ax = src.ax;
+        if (src.ay != null) dst.ay = src.ay;
+        if (src.w != null) dst.w = src.w;
+        if (src.h != null) dst.h = src.h;
+        if (src.scaleX != null) dst.scaleX = src.scaleX;
+        if (src.scaleY != null) dst.scaleY = src.scaleY;
+        if (src.rot != null) dst.rot = src.rot;
+        if (src.flip != null) dst.flip = src.flip;
+      }
+    } catch (e) { /* si no existe, se usan los defaults inline */ }
+  })();
+
   // Dibuja una pieza anclada en el origen actual del contexto.
   function part(key, dim) {
     const p = PARTS[key];
@@ -122,9 +174,10 @@
     const [sx, sy, sw, sh] = box;
     const naturalW = p.w != null ? p.w : p.h * sw / sh;
     const dw = naturalW * (p.scaleX || 1);
-    const dh = p.h != null ? p.h : p.w * sh / sw;
+    const dh = (p.h != null ? p.h : p.w * sh / sw) * (p.scaleY || 1);
     const dx = -p.ax * dw, dy = -p.ay * dh;
     ctx.save();
+    if (p.rot) ctx.rotate(p.rot);
     if (p.flip) ctx.scale(-1, 1);
     const fx = p.flip ? -(dx + dw) : dx;      // al espejar, recolocar en X
     if (dim) {
@@ -151,7 +204,7 @@
     hipF:.07, kneeF:.14, ankleF:0,
     hipB:-.07, kneeB:.14, ankleB:0,
     shF:-.2, elF:-.4, shB:-.1, elB:-1.15,
-    head:.02, grip:1.35, wing:0,
+    head:.02, grip:1.35, wing:0, slide:0,
   };
   const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
   const approach = (cur, tgt, rate, dt) => cur + (tgt - cur) * (1 - Math.exp(-rate * dt));
@@ -166,12 +219,12 @@
     ph += dt * (run ? 10 : 6);
     if (mode === "attack") {
       attack -= dt;
-      if (attack <= 0) attack = .28;          // repite el golpe en bucle
+      if (attack <= 0) attack = .42;          // repite el golpe en bucle
     } else attack = 0;
 
     let lean = .05, crouch = 0;
     let hipF = .07, kneeF = .14, hipB = -.07, kneeB = .14;
-    let shF = -.2, elF = -.4, shB = -.1, elB = -1.15, head = .02;
+    let shF = -.2, elF = -.4, shB = -.1, elB = -1.15, head = .02, grip = 1.35;
 
     if (!slide && !air && !run) {             // reposo: respiración
       const br = Math.sin(t * 2.2);
@@ -180,9 +233,16 @@
     }
 
     if (slide) {
-      crouch = 1; lean = .85;
-      hipF = 1.35; kneeF = .25; hipB = .35; kneeB = 1.9;
-      shF = .75; elF = -.2; shB = .35; elB = -1.3; head = -.34;
+      // Derrape. El personaje mira a +x, y en esta convencion una cadera
+      // NEGATIVA lanza el muslo hacia +x. Por eso hipF/hipB van negativos:
+      // las dos piernas salen hacia la direccion del derrape y son ellas
+      // las que van delante. La pierna cercana va casi estirada (kneeF
+      // pequeno) y es la que lidera; la lejana va plegada (kneeB grande)
+      // con la rodilla adelante y el pie recogido bajo la cadera, lo que
+      // ademas baja la pelvis y deja el cuerpo tumbado atras.
+      crouch = .62; lean = -.70;
+      hipF = -1.05; kneeF = .10; hipB = -1.15; kneeB = 2.30;
+      shF = -.85; elF = -.50; shB = .55; elB = -.85; head = -.25;
     } else if (air) {
       const rising = mode === "rise" || mode === "wings";
       lean = rising ? .13 : -.03;
@@ -202,131 +262,192 @@
     }
 
     if (attack > 0) {                          // 3 fases del espadazo
-      const k0 = clamp(1 - attack / .28, 0, 1);
-      if (k0 < .2) {
-        const a = k0 / .2;
-        shF = .4 + a * 1.0; elF = -.5 - a * .7;
-        lean -= a * .12; head -= a * .08; shB += a * .3;
-        crouch = Math.max(crouch, a * .15);
+      // Espadazo en 3 fases sobre k0 (0..1):
+      //  0.00-0.22  anticipacion: arma atras y arriba, torso rota, ligera
+      //             flexion de piernas para cargar el golpe.
+      //  0.22-0.55  golpe: arco rapido y amplio hacia adelante-abajo, el
+      //             brazo se extiende (codo casi recto) en el pico.
+      //  0.55-1.00  follow-through: el brazo baja y se frenan los angulos.
+      const k0 = clamp(1 - attack / .42, 0, 1);
+      if (k0 < .22) {
+        const a = k0 / .22, e = Math.sin(a * Math.PI * .5);
+        shF = .4 + a * 1.25; elF = -.5 - a * .95;
+        lean -= a * .18; head -= a * .12; shB += a * .35;
+        crouch = Math.max(crouch, a * .2); kneeF += a * .22; kneeB += a * .18;
       } else if (k0 < .55) {
-        const k = (k0 - .2) / .35, e = Math.sin(k * Math.PI);
-        shF = 1.4 - k * 2.7; elF = -1.2 + k * 1.0;
-        lean += .18 * e; head += .12 * e;
-        crouch = Math.max(crouch, .12 * e);
-        kneeF += .25 * e;
+        const k = (k0 - .22) / .33, e = Math.sin(k * Math.PI);
+        shF = 1.65 - k * 3.0; elF = -1.45 + k * 1.25;
+        lean += .26 * e; head += .16 * e;
+        crouch = Math.max(crouch, .16 * e); kneeF += .3 * e;
+        grip = .35 + k * .4;
       } else {
         const k = (k0 - .55) / .45;
-        shF = -1.3 + k * .5; elF = -.2 - k * .3;
-        lean -= (1 - k) * .06;
+        shF = -1.35 + k * .55; elF = -.2 - k * .35;
+        lean -= (1 - k) * .1; head -= (1 - k) * .04;
+        grip = 1.35 - (1 - k) * .6;
       }
     }
 
     const rate = 17;
-    rig.lean  = approach(rig.lean, lean, rate, dt);
+    // En el derrape las piernas llegan a su pose mucho antes que el tronco:
+    // se disparan hacia la direccion del deslizamiento y el resto del cuerpo
+    // las sigue, arrastrado. Fuera del derrape todo va al mismo ritmo.
+    const rLeg = slide ? 30 : rate, rBody = slide ? 7 : rate;
+    rig.lean  = approach(rig.lean, lean, rBody, dt);
     rig.crouch= approach(rig.crouch, crouch, slide ? 26 : 13, dt);
-    rig.hipF  = approach(rig.hipF, hipF, rate, dt);
-    rig.kneeF = approach(rig.kneeF, kneeF, rate, dt);
-    rig.hipB  = approach(rig.hipB, hipB, rate, dt);
-    rig.kneeB = approach(rig.kneeB, kneeB, rate, dt);
-    rig.shF   = approach(rig.shF, shF, attack > 0 ? 34 : rate, dt);
-    rig.elF   = approach(rig.elF, elF, attack > 0 ? 34 : rate, dt);
-    rig.shB   = approach(rig.shB, shB, rate, dt);
-    rig.elB   = approach(rig.elB, elB, rate, dt);
-    rig.head  = approach(rig.head, head, 12, dt);
-    rig.grip  = approach(rig.grip, attack > 0 ? .35 : 1.35, 26, dt);
-    rig.ankleF= approach(rig.ankleF, clamp(-(rig.hipF + rig.kneeF) * .55, -.5, .5), rate, dt);
-    rig.ankleB= approach(rig.ankleB, clamp(-(rig.hipB + rig.kneeB) * .55, -.5, .5), rate, dt);
+    rig.hipF  = approach(rig.hipF, hipF, rLeg, dt);
+    rig.kneeF = approach(rig.kneeF, kneeF, rLeg, dt);
+    rig.hipB  = approach(rig.hipB, hipB, rLeg, dt);
+    rig.kneeB = approach(rig.kneeB, kneeB, rLeg, dt);
+    rig.shF   = approach(rig.shF, shF, attack > 0 ? 34 : rBody, dt);
+    rig.elF   = approach(rig.elF, elF, attack > 0 ? 34 : rBody, dt);
+    rig.shB   = approach(rig.shB, shB, rBody, dt);
+    rig.elB   = approach(rig.elB, elB, rBody, dt);
+    rig.head  = approach(rig.head, head, slide ? 7 : 12, dt);
+    rig.grip  = approach(rig.grip, grip, 26, dt);
+    rig.ankleF= approach(rig.ankleF, clamp(-(rig.hipF + rig.kneeF) * .55, -.5, .5), rLeg, dt);
+    rig.ankleB= approach(rig.ankleB, clamp(-(rig.hipB + rig.kneeB) * .55, -.5, .5), rLeg, dt);
     rig.bob   = run ? Math.abs(Math.sin(ph)) * 1.5 : Math.sin(t * 3) * .4;
     rig.wing  = approach(rig.wing, mode === "wings" ? 1 : 0, 9, dt);
+    rig.slide = approach(rig.slide, slide ? 1 : 0, slide ? 7 : 14, dt);
   }
 
   // --- Piezas compuestas ---------------------------------------------
+  // Cada pierna usa sus propios sprites (cerca/lejos) para respetar la
+  // perspectiva. La rodilla articula greba+bota respecto al muslo.
   function leg(front) {
     const dim = front ? 0 : .34;
+    const muslo = front ? "musloCerca" : "musloLejos";
+    const greba = front ? "grebaCerca" : "grebaLejos";
+    const bota  = front ? "botaCerca"  : "botaLejos";
     const hip  = front ? rig.hipF : rig.hipB;
     const knee = front ? rig.kneeF : rig.kneeB;
     const ank  = front ? rig.ankleF : rig.ankleB;
     ctx.save();
     ctx.rotate(hip);
-    part("muslo", dim);
+    part(muslo, dim);
     ctx.translate(0, THIGH); ctx.rotate(knee);
-    part("greba", dim);
+    part(greba, dim);
     ctx.translate(0, SHIN); ctx.rotate(ank);
-    part("bota", dim);
+    part(bota, dim);
     ctx.restore();
   }
 
-  function arm(sh, el, dim, hand) {
+  // far = brazo lejano: usa sus propios sprites (perspectiva) en vez de
+  // reutilizar los del brazo cercano solo atenuados.
+  function arm(sh, el, dim, hand, far) {
     ctx.save();
     ctx.rotate(sh);
-    part("brazo", dim);
+    part(far ? "brazoLejos" : "brazo", dim);
     ctx.translate(0, UPPER_ARM); ctx.rotate(el);
-    part("antebrazo", dim);
+    part(far ? "antebrazoLejos" : "antebrazo", dim);
     ctx.translate(0, FOREARM);
     if (hand) hand();
     ctx.restore();
   }
 
-  // Capa: sigue siendo vectorial (física dinámica).
-  const CAPE_LEN = [9, 8.5, 8, 7], CAPE_W = [13, 12.5, 11, 8.5, 5.5];
-  const capeAng = [.3,.12,.09,.06], capeVel = [0,0,0,0];
+  // Capa: sprite v3 con balanceo suave (basado en lean + viento).
+  let capeAng = .3, capeVel = 0;
   function updateCape(dt) {
-    const target = [.30 + rig.lean * .5, .12, .09, .06];
     const wind = mode === "run" ? .5 : mode === "dash" ? 1.1 : .16;
-    for (let i = 0; i < capeAng.length; i++) {
-      const tg = target[i] + Math.sin(t * (2.3 + i * .7) + i) * wind * .32;
-      capeVel[i] += (tg - capeAng[i]) * 26 * dt;
-      capeVel[i] *= Math.exp(-6 * dt);
-      capeAng[i] += capeVel[i] * dt;
-    }
+    const target = .30 + rig.lean * .5 + Math.sin(t * (2.3)) * wind * .32;
+    capeVel += (target - capeAng) * 26 * dt;
+    capeVel *= Math.exp(-6 * dt);
+    capeAng += capeVel * dt;
   }
   function cape() {
-    const pts = []; let cx = -3.5, cy = SH_Y - 1, ang = 0;
-    for (let i = 0; i < CAPE_LEN.length; i++) {
-      ang += capeAng[i];
-      pts.push({ x: cx, y: cy, ang });
-      cx += -Math.sin(ang) * CAPE_LEN[i];
-      cy += Math.cos(ang) * CAPE_LEN[i];
+    ctx.save();
+    ctx.translate(-3.5, SH_Y - 2);
+    ctx.rotate(capeAng * .6);
+    part("capa", 0);
+    ctx.restore();
+  }
+
+  // Guantelete vectorial: se dibuja en el espacio de la mano para que se vea
+  // que la mano agarra el arma o el escudo (los sprites de antebrazo lejano
+  // no traen guante).
+  function gauntlet(dim) {
+    ctx.save();
+    if (dim) ctx.filter = `brightness(${(1 - dim * .45).toFixed(3)}) saturate(${(1 - dim * .35).toFixed(3)})`;
+    const g = ctx.createLinearGradient(-2.3, -1.4, 2.3, 4);
+    g.addColorStop(0, "#eef1f7"); g.addColorStop(.45, "#bcc5d4"); g.addColorStop(1, "#7c8695");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.roundRect(-2.3, -1.4, 4.6, 5.3, 1.6); ctx.fill();
+    ctx.strokeStyle = "rgba(58,64,78,.6)"; ctx.lineWidth = .3; ctx.stroke();
+    // Lamas de los nudillos.
+    ctx.strokeStyle = "rgba(68,76,92,.5)"; ctx.lineWidth = .26;
+    for (let i = 0; i < 3; i++) {
+      const y = .15 + i * 1.2;
+      ctx.beginPath(); ctx.moveTo(-1.9, y); ctx.lineTo(1.9, y); ctx.stroke();
     }
-    pts.push({ x: cx, y: cy, ang });
-    const L = [], R = [];
-    for (let i = 0; i < pts.length; i++) {
-      const w = CAPE_W[i] / 2, nx = Math.cos(pts[i].ang), ny = Math.sin(pts[i].ang);
-      L.push([pts[i].x - nx * w, pts[i].y - ny * w]);
-      R.push([pts[i].x + nx * w, pts[i].y + ny * w]);
-    }
-    const tip = pts[pts.length - 1];
-    const g = ctx.createLinearGradient(-3.5, SH_Y - 1, tip.x, tip.y);
-    g.addColorStop(0, "#6a8af0"); g.addColorStop(.25, "#3e5cc6");
-    g.addColorStop(.55, "#2646a6"); g.addColorStop(.8, "#162a6e");
-    g.addColorStop(1, "#0c1640");
-    ctx.beginPath();
-    ctx.moveTo(L[0][0], L[0][1]);
-    for (let i = 1; i < L.length; i++) ctx.lineTo(L[i][0], L[i][1]);
-    for (let i = R.length - 1; i >= 0; i--) ctx.lineTo(R[i][0], R[i][1]);
-    ctx.closePath();
-    ctx.fillStyle = g; ctx.fill();
-    ctx.strokeStyle = "rgba(200,222,255,.35)"; ctx.lineWidth = .5; ctx.stroke();
+    // Pulgar cerrado por delante.
+    ctx.fillStyle = "#ccd4e1";
+    ctx.beginPath(); ctx.ellipse(1.5, 1.4, .85, 1.9, -.35, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(58,64,78,.5)"; ctx.lineWidth = .24; ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,.3)";
+    ctx.beginPath(); ctx.ellipse(-.9, .1, 1.05, .65, -.4, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
   }
 
   function wing(far) {
     const a = rig.wing;
     if (a < .02) return;
-    const beat = Math.sin(t * 7) * .18;
+    const beat = Math.sin(t * 6) * .28;
     ctx.save();
-    ctx.translate(-4, SH_Y - 2);
-    ctx.rotate(-.28 + beat + (far ? .16 : 0));
+    // Las alas nacen en la espalda alta, junto a la base del cuello/cabeza.
+    ctx.translate(-3.8, SH_Y - 4);
+    ctx.rotate(-.22 + beat + (far ? .22 : 0));
     ctx.globalAlpha = a * (far ? .72 : 1);
-    ctx.scale(far ? .88 : 1, far ? .88 : 1);
-    // Resplandor santo detrás de las plumas.
+    // Alas mas grandes: escala global aumentada.
+    const WS = far ? 1.25 : 1.55;
+    ctx.scale(WS, WS);
+    // Resplandor santo detras de las plumas.
     ctx.save();
     ctx.globalCompositeOperation = "screen";
-    const hg = ctx.createRadialGradient(-16, -6, 1, -16, -6, 34);
-    hg.addColorStop(0, "rgba(255,246,214,.42)");
+    const hg = ctx.createRadialGradient(-18, -14, 1, -18, -14, 52);
+    hg.addColorStop(0, "rgba(255,246,214,.45)");
     hg.addColorStop(1, "rgba(255,214,120,0)");
-    ctx.fillStyle = hg; ctx.fillRect(-52, -40, 76, 76);
+    ctx.fillStyle = hg; ctx.fillRect(-78, -64, 110, 110);
     ctx.restore();
-    part("ala", far ? .3 : 0);
+    // Ala de angel: plumas largas escalonadas que nacen de la espalda y
+    // suben hacia atras-arriba. 4 filas x 7 plumas, mas largas y densas.
+    const rows = 4;
+    for (let r = 0; r < rows; r++) {
+      const feathers = 7;
+      const rowOff = r * 2.6;
+      for (let i = 0; i < feathers; i++) {
+        const k = i / (feathers - 1);
+        const fx = -1 - k * 4;
+        const fy = 4 + rowOff - k * (9 + r * 1.4);
+        const ang = -1.0 - k * 0.7 - r * 0.12;
+        const len = 26 - r * 4 - k * 6;
+        ctx.save();
+        ctx.translate(fx, fy);
+        ctx.rotate(ang);
+        const g = ctx.createLinearGradient(0, 0, len, 0);
+        g.addColorStop(0, far ? "#c9b8e8" : "#fff8e8");
+        g.addColorStop(.5, "#ece0fa");
+        g.addColorStop(1, "rgba(214,202,250,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.moveTo(0, -2.4);
+        ctx.quadraticCurveTo(len * .5, -4.2, len, -1.2);
+        ctx.quadraticCurveTo(len * .5, 1.8, 0, 2.4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = "rgba(170,160,215,.4)";
+        ctx.lineWidth = .28;
+        ctx.stroke();
+        // Raquis (linea central de la pluma) para dar detalle.
+        ctx.strokeStyle = "rgba(150,138,200,.3)";
+        ctx.lineWidth = .18;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(len * .5, -1.2, len, -.4);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
     ctx.restore();
   }
 
@@ -340,36 +461,49 @@
     const grounded = !(mode === "rise" || mode === "fall" || mode === "wings");
     if (grounded) pelvisY = -Math.max(reach(rig.hipF, rig.kneeF), reach(rig.hipB, rig.kneeB));
     const torsoY = pelvisY - 3;
+    // En el derrape el tronco se retrasa respecto a las caderas: las piernas
+    // van delante y el cuerpo queda colgando detras.
+    const torsoX = -rig.slide * 3.5;
 
+    // Alas y capa siguen el torso. Sin esta transformación, las alas quedaban
+    // ancladas cerca de la cadera en vez de la espalda alta.
+    ctx.save(); ctx.translate(torsoX, torsoY); ctx.rotate(rig.lean);
     wing(true);                                   // ala lejana
-
-    ctx.save(); ctx.translate(0, torsoY); ctx.rotate(rig.lean);
     cape();
+    wing(false);                                  // ala cercana
     ctx.restore();
 
     ctx.save(); ctx.translate(-2.4, pelvisY); leg(false); ctx.restore();
     ctx.save(); ctx.translate(2.8, pelvisY);  leg(true);  ctx.restore();
 
-    ctx.save(); ctx.translate(0, torsoY); ctx.rotate(rig.lean);
+    ctx.save(); ctx.translate(torsoX, torsoY); ctx.rotate(rig.lean);
 
-    // Brazo del escudo: queda DETRAS del torso. La hombrera y toda la
+    // Brazo del escudo: queda DETRAS del torso. La hombrera lejana y toda la
     // cadena hombro-codo-mano se dibujan primero; la coraza los solapa.
-    ctx.save(); ctx.translate(-4.6, SH_Y); part("hombrera", .34); ctx.restore();
+    ctx.save(); ctx.translate(-4.6, SH_Y + 1.2); part("hombreraLejos", .34); ctx.restore();
     ctx.save(); ctx.translate(-4.6, SH_Y + .6);
-    arm(rig.shB, rig.elB, .3, () => {
-      ctx.save();
-      ctx.translate(0, -FOREARM * .45);
-      ctx.rotate(-(rig.shB + rig.elB) + .12);
-      ctx.translate(-5.5, 4);
-      part("escudo", 0);
-      ctx.restore();
-    });
+    // Escudo al fondo de todo el brazo: se dibuja primero con la
+    // transformacion completa hasta la mano, y luego el brazo encima.
+    ctx.save();
+    ctx.rotate(rig.shB);
+    ctx.translate(0, UPPER_ARM); ctx.rotate(rig.elB);
+    ctx.translate(0, FOREARM);
+    ctx.translate(0, -FOREARM * .45);
+    ctx.rotate(-(rig.shB + rig.elB) + .12);
+    ctx.translate(-5.5, 4);
+    part("escudo", 0);
+    ctx.restore();
+    // far=true: sprites propios del lado lejano. El antebrazo lejano no trae
+    // guante, asi que el guantelete vectorial va DESPUES del brazo, encima
+    // del escudo: se lee como la mano cerrada sobre la embrazadura.
+    arm(rig.shB, rig.elB, .3, () => gauntlet(.3), true);
     ctx.restore();
 
-    // Torso por delante del brazo del escudo.
+    // La coraza v4 queda sobre el torso, pero debajo de cabeza, brazos y
+    // hombreras. Su silueta no invade las articulaciones del hombro.
     part("coraza", 0);
 
-    // Cabeza, luego brazo DE LA ESPADA al frente, y hombrera encima.
+    // Cabeza, luego brazo DE LA ESPADA al frente, y hombrera cercana encima.
     ctx.save();
     ctx.translate(.6, SH_Y - 13); ctx.rotate(rig.head);
     ctx.fillStyle = "#d79c76";                    // cuello vectorial
@@ -378,18 +512,21 @@
     ctx.restore();
 
     ctx.save(); ctx.translate(5.4, SH_Y + .8);
-    arm(rig.shF, rig.elF, 0, () => {
-      ctx.save();
-      ctx.translate(1.2, 3); ctx.rotate(rig.grip);
-      part("espada", 0);
-      ctx.restore();
-    });
+    // Espada por DETRAS del brazo: se dibuja primero recorriendo la cadena
+    // hombro-codo-mano, y luego el brazo encima. Asi el guantelete del
+    // antebrazo tapa la empunadura y se lee como que la mano la sostiene.
+    ctx.save();
+    ctx.rotate(rig.shF);
+    ctx.translate(0, UPPER_ARM); ctx.rotate(rig.elF);
+    ctx.translate(0, FOREARM);
+    ctx.translate(1.2, 3); ctx.rotate(rig.grip);
+    part("espada", 0);
+    ctx.restore();
+    arm(rig.shF, rig.elF, 0, null, false);
     ctx.restore();
 
-    ctx.save(); ctx.translate(5.4, SH_Y); part("hombrera", 0); ctx.restore();
+    ctx.save(); ctx.translate(5.4, SH_Y + 1.2); part("hombreraCerca", 0); ctx.restore();
     ctx.restore();
-
-    wing(false);                                  // ala cercana
 
     if (showSkel) skeleton(pelvisY, torsoY);
   }

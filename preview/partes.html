@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Piezas y orden de render — Caballero</title>
+<style>
+  :root { color-scheme: dark; --gold:#e8c872; --ink:#0b0912; --card:#171320; }
+  * { box-sizing:border-box }
+  body { margin:0; padding:24px; background:radial-gradient(circle at 50% 0,#211a35,var(--ink) 55%);
+    color:#eee8dc; font:14px/1.5 system-ui,sans-serif }
+  h1,h2 { color:var(--gold); margin:.2em 0 }
+  .intro { max-width:1000px; margin:auto }
+  .order { display:flex; flex-wrap:wrap; gap:7px; margin:16px 0 24px }
+  .order span { padding:6px 9px; border:1px solid #66583b; background:#19140d; border-radius:5px }
+  .order b { color:var(--gold) }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px;
+    max-width:1200px; margin:auto }
+  article { background:linear-gradient(145deg,#1d1828,#100d18); border:1px solid #393047;
+    border-radius:10px; overflow:hidden }
+  canvas { display:block; width:100%; height:240px; background:
+    linear-gradient(45deg,#24202c 25%,transparent 25%) 0 0/20px 20px,
+    linear-gradient(45deg,transparent 75%,#24202c 75%) 0 0/20px 20px,
+    linear-gradient(45deg,transparent 75%,#24202c 75%) 10px -10px/20px 20px,
+    linear-gradient(45deg,#24202c 25%,#18151e 25%) 10px -10px/20px 20px }
+  .txt { padding:11px 13px 14px }
+  h3 { color:#f5db91; margin:0 0 5px; font-size:15px }
+  p { margin:3px 0; color:#bbb2c7 }
+  code { color:#b8dcff; font-size:12px }
+  .badge { display:inline-block; padding:2px 6px; border-radius:10px; background:#26355f;
+    color:#cbd9ff; font-size:11px }
+  .back { color:#a89bb9; margin-bottom:16px; display:inline-block }
+</style>
+</head>
+<body>
+<main class="intro">
+  <a class="back" href="/caballero.html">← Volver a la animación</a> &nbsp;·&nbsp;
+  <a class="back" href="/esqueleto.html">Editor de esqueleto</a>
+  <h1>Piezas del caballero</h1>
+  <p>Cada tarjeta muestra una pieza aislada. El punto rojo es el ancla que se conecta a la articulación.</p>
+  <h2>Orden actual: atrás → adelante</h2>
+  <div class="order" id="order"></div>
+</main>
+<section class="grid" id="grid"></section>
+<script>
+const PARTS = [
+  {n:"Ala lejana",type:"Vectorial",order:1,pos:"espalda alta (-3.8, SH_Y - 4)",note:"Junto al cuello, detrás del cuerpo; 70% opacidad.",vector:"wing"},
+  {n:"Capa",file:"parte-capa-v6.png",box:[352,93,269,781],h:26,ax:.79,ay:.06,order:2,pos:"espalda (-3.5, SH_Y - 2)",note:"Silueta de perfil, estrecha. El ancla es el broche."},
+  {n:"Ala cercana",type:"Vectorial",order:3,pos:"espalda alta (-3.8, SH_Y - 4)",note:"Junto al cuello y detrás del cuerpo.",vector:"wing"},
+  {n:"Muslo lejano",file:"parte-pierna-lejos-v3.png",box:[397,69,269,388],h:15,ax:.50,ay:.04,order:4,pos:"cadera (-2.4, pelvisY)"},
+  {n:"Greba lejana",file:"parte-pierna-lejos-v3.png",box:[397,457,269,326],h:12.5,ax:.50,ay:.05,order:5,pos:"rodilla lejana"},
+  {n:"Bota lejana",file:"parte-pierna-lejos-v3.png",box:[397,783,269,166],h:6.5,ax:.50,ay:.06,order:6,pos:"tobillo lejano"},
+  {n:"Muslo cercano",file:"parte-pierna-cerca-v3.png",box:[381,78,299,362],h:15,ax:.50,ay:.04,order:7,pos:"cadera (2.8, pelvisY)"},
+  {n:"Greba cercana",file:"parte-pierna-cerca-v3.png",box:[381,440,299,304],h:12.5,ax:.50,ay:.05,order:8,pos:"rodilla cercana"},
+  {n:"Bota cercana",file:"parte-pierna-cerca-v3.png",box:[381,744,299,155],h:6.5,ax:.50,ay:.06,order:9,pos:"tobillo cercano"},
+  {n:"Hombrera lejana",file:"parte-hombrera-lejos-v4.png",box:[395,368,238,231],w:8.5,ax:.50,ay:.30,order:10,pos:"hombro (-4.6, SH_Y)",note:"Solo placas del hombro; sin torso."},
+  {n:"Brazo del escudo",file:"parte-brazo-lejos-v5.png",box:[415,144,179,672],h:13.5,ax:.50,ay:.06,order:11,pos:"hombro lejano (-4.6, SH_Y + 0.6)",note:"Sprite propio del lado lejano, más estrecho."},
+  {n:"Antebrazo del escudo",file:"parte-antebrazo-lejos-v5.png",box:[401,285,225,443],h:12.5,ax:.50,ay:.08,order:12,pos:"codo lejano",note:"Cortado en la muñeca, sin guante."},
+  {n:"Escudo",file:"parte-escudo-v3.png",box:[226,111,573,769],h:23,ax:.50,ay:.50,order:13,pos:"mano lejana; detrás del torso"},
+  {n:"Coraza v5",file:"parte-coraza-v5.png",box:[345,235,348,540],h:21,ax:.50,ay:.62,order:14,pos:"torso (0, torsoY)",note:"Perfil. ay=.62 alinea el borde superior con SH_Y."},
+  {n:"Cabeza",file:"parte-cabeza-v3.png",box:[148,59,743,887],w:24,ax:.50,ay:.55,order:15,pos:"(.6, SH_Y - 13)"},
+  {n:"Brazo de espada",file:"parte-brazo-cerca-v3.png",box:[361,173,313,640],h:13.5,ax:.50,ay:.06,order:16,pos:"hombro cercano (5.4, SH_Y + 0.8)"},
+  {n:"Antebrazo de espada",file:"parte-antebrazo-cerca-v3.png",box:[375,166,274,639],h:16.5,ax:.50,ay:.08,order:17,pos:"codo cercano"},
+  {n:"Espada",file:"parte-espada-v3.png",box:[49,406,928,192],w:40,ax:.18,ay:.50,order:18,pos:"mano cercana"},
+  {n:"Hombrera cercana",file:"parte-hombrera-cerca-v4.png",box:[357,321,341,351],w:11,ax:.50,ay:.30,order:19,pos:"hombro (5.4, SH_Y); sobre brazo y cabeza",note:"Solo placas del hombro; sin torso."}
+];
+
+const order = document.querySelector("#order");
+PARTS.forEach(p => order.insertAdjacentHTML("beforeend",`<span><b>${p.order}</b> ${p.n}</span>`));
+
+function drawVector(ctx,p) {
+  ctx.save(); ctx.translate(120,120);
+  if (p.vector==="torso") {
+    ctx.fillStyle="#1c2a5c"; ctx.strokeStyle="#0c1638"; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(-45,-75); ctx.lineTo(45,-75); ctx.lineTo(40,80);
+    ctx.lineTo(-40,80); ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else {
+    ctx.rotate(-.25);
+    for(let r=0;r<3;r++) for(let i=0;i<6;i++) {
+      const k=i/5, x=-5-k*10, y=25+r*7-k*(42+r*5), len=62-r*10-k*15;
+      ctx.save(); ctx.translate(x,y); ctx.rotate(-.35-k*1.15-r*.12);
+      const g=ctx.createLinearGradient(0,0,len,0);
+      g.addColorStop(0,"#fff6e2"); g.addColorStop(.6,"#e6d8f8"); g.addColorStop(1,"rgba(214,202,250,0)");
+      ctx.fillStyle=g; ctx.beginPath(); ctx.moveTo(0,-6); ctx.quadraticCurveTo(len*.5,-11,len,-3);
+      ctx.quadraticCurveTo(len*.5,5,0,6); ctx.closePath(); ctx.fill(); ctx.restore();
+    }
+  }
+  ctx.restore();
+  ctx.fillStyle="#ff4545"; ctx.beginPath(); ctx.arc(120,120,4,0,Math.PI*2); ctx.fill();
+}
+
+function drawSprite(canvas,p) {
+  const ctx=canvas.getContext("2d"), im=new Image();
+  im.onload=()=>{
+    const [sx,sy,sw,sh]=p.box;
+    const scale=Math.min(190/sw,190/sh);
+    const dw=sw*scale, dh=sh*scale, x=(240-dw)/2, y=(240-dh)/2;
+    ctx.drawImage(im,sx,sy,sw,sh,x,y,dw,dh);
+    ctx.fillStyle="#ff4545"; ctx.beginPath(); ctx.arc(x+p.ax*dw,y+p.ay*dh,4,0,Math.PI*2); ctx.fill();
+  };
+  im.src="/sprites/"+p.file;
+}
+
+const grid=document.querySelector("#grid");
+PARTS.forEach(p=>{
+  const el=document.createElement("article");
+  el.innerHTML=`<canvas width="240" height="240"></canvas><div class="txt">
+    <h3>${p.order}. ${p.n} <span class="badge">${p.type||"Sprite IA"}</span></h3>
+    <p><code>Posición: ${p.pos}</code></p>
+    ${p.file?`<p><code>${p.file}</code></p>`:""}
+    ${p.note?`<p>${p.note}</p>`:""}
+  </div>`;
+  grid.appendChild(el);
+  p.vector?drawVector(el.querySelector("canvas").getContext("2d"),p):drawSprite(el.querySelector("canvas"),p);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,172 @@
+{
+  "bones": {
+    "THIGH": 15,
+    "SHIN": 12.5,
+    "UPPER_ARM": 10,
+    "FOREARM": 9
+  },
+  "points": {
+    "hipB": {
+      "x": -2.4,
+      "y": 0
+    },
+    "hipF": {
+      "x": 2.8,
+      "y": 0
+    },
+    "pauldronB": {
+      "x": 2.023,
+      "y": -11.341
+    },
+    "shoulderB": {
+      "x": 2.39,
+      "y": -10.207
+    },
+    "coraza": {
+      "x": 0,
+      "y": 0
+    },
+    "head": {
+      "x": 0.462,
+      "y": -21.596
+    },
+    "wing": {
+      "x": -8.578,
+      "y": -12.121
+    },
+    "cape": {
+      "x": -6.697,
+      "y": -12.793
+    },
+    "shoulderF": {
+      "x": -4.196,
+      "y": -8.483
+    },
+    "pauldronF": {
+      "x": -2.937,
+      "y": -13.77
+    },
+    "shield": {
+      "x": 3.678,
+      "y": 0.516
+    },
+    "sword": {
+      "x": 0.09,
+      "y": 6.857
+    }
+  },
+  "parts": {
+    "coraza": {
+      "file": "parte-coraza-v5.png",
+      "ax": 0.5,
+      "ay": 0.62,
+      "h": 21
+    },
+    "brazo": {
+      "file": "parte-brazo-cerca-v3.png",
+      "ax": 0.5,
+      "ay": 0.06,
+      "h": 13.5,
+      "scaleX": 1.5,
+      "scaleY": 1
+    },
+    "antebrazo": {
+      "file": "parte-antebrazo-cerca-v3.png",
+      "ax": 0.7,
+      "ay": -0.1,
+      "h": 16.5
+    },
+    "brazoLejos": {
+      "file": "parte-brazo-cerca-v3.png",
+      "ax": 0.5,
+      "ay": 0.06,
+      "h": 13.5,
+      "scaleX": 1,
+      "scaleY": 1,
+      "flip": true
+    },
+    "antebrazoLejos": {
+      "file": "parte-antebrazo-lejos-v6.png",
+      "ax": 0.5,
+      "ay": 0.08,
+      "h": 12.5,
+      "scaleX": 0.5
+    },
+    "escudo": {
+      "file": "parte-escudo-v6.png",
+      "ax": 0.5,
+      "ay": 0.5,
+      "h": 23,
+      "rot": 0.3141592653589793
+    },
+    "espada": {
+      "file": "parte-espada-v3.png",
+      "ax": 0.18,
+      "ay": 0.5,
+      "w": 40,
+      "rot": 4.71238898038469
+    },
+    "cabeza": {
+      "file": "parte-cabeza-v3.png",
+      "ax": 0.5,
+      "ay": 0.55,
+      "w": 24,
+      "scaleX": 0.8,
+      "scaleY": 0.8
+    },
+    "hombreraCerca": {
+      "file": "parte-hombrera-cerca-v4.png",
+      "ax": 0.5,
+      "ay": 0.3,
+      "w": 11
+    },
+    "hombreraLejos": {
+      "file": "parte-hombrera-lejos-v4.png",
+      "ax": 0.5,
+      "ay": 0.3,
+      "w": 8.5
+    },
+    "capa": {
+      "file": "parte-capa-v6.png",
+      "ax": 0.79,
+      "ay": 0.06,
+      "h": 26
+    },
+    "musloCerca": {
+      "file": "parte-pierna-cerca-v3.png",
+      "ax": 0.5,
+      "ay": 0.04,
+      "h": 15
+    },
+    "grebaCerca": {
+      "file": "parte-pierna-cerca-v3.png",
+      "ax": 0.5,
+      "ay": 0.05,
+      "h": 12.5
+    },
+    "botaCerca": {
+      "file": "parte-pierna-cerca-v3.png",
+      "ax": 0.5,
+      "ay": 0.06,
+      "h": 6.5
+    },
+    "musloLejos": {
+      "file": "parte-pierna-lejos-v3.png",
+      "ax": 0.5,
+      "ay": 0.04,
+      "h": 15
+    },
+    "grebaLejos": {
+      "file": "parte-pierna-lejos-v3.png",
+      "ax": 0.5,
+      "ay": 0.05,
+      "h": 12.5
+    },
+    "botaLejos": {
+      "file": "parte-pierna-lejos-v3.png",
+      "ax": 0.5,
+      "ay": 0.06,
+      "h": 6.5
+    }
+  }
+}
