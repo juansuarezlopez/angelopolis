@@ -50,14 +50,25 @@
       </div>
     </div>
 
-    <div id="intro" class="intro">
+    <div id="gate" class="overlay gate">
+      <div class="panel gate-panel">
+        <p class="kicker">Sentencia de la orden</p>
+        <h2>Di tu clave, caballero</h2>
+        <p class="story">Solo quien pronuncia la palabra santa puede levantar el escudo.</p>
+        <input type="text" id="gate-input" class="gate-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="clave…" aria-label="Clave del caballero" />
+        <p id="gate-error" class="gate-error" hidden>Clave equivocada. La orden no te reconoce.</p>
+        <button type="button" class="cta" id="btn-gate">Entrar</button>
+      </div>
+    </div>
+
+    <div id="intro" class="intro" hidden>
       <div class="intro-inner">
         <p id="intro-text" class="intro-text"></p>
         <button type="button" class="cta intro-cta" id="btn-intro-continue" hidden>Continuar</button>
       </div>
     </div>
 
-    <div id="overlay" class="overlay">
+    <div id="overlay" class="overlay" hidden>
       <div class="panel" id="panel-start">
         <img class="keyart" src="assets/angelopolis-keyart.png" alt="Joven paladín de armadura plateada con escudo de cruz en las calles de Angelópolis" />
         <p class="kicker">Un paladín despierta</p>
@@ -105,5 +116,6 @@
   <script src="assets/head-sprite.js"></script>
   <script src="assets/pauldron-sprite.js"></script>
   <script src="js/game.js"></script>
+  <audio id="intro-voice" src="assets/audio/intro.mp3" preload="auto"></audio>
 </body>
 </html>

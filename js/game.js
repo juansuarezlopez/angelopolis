@@ -134,8 +134,16 @@
     const root = document.documentElement || {};
     const vw = root.clientWidth || window.innerWidth || W;
     const vh = root.clientHeight || window.innerHeight || H;
-    // Caja 16:9 que cabe en el viewport (letterbox).
-    let scale = Math.min(vw / W, vh / H);
+    // En landscape reservamos margenes laterales amplios para que los
+    // botones táctiles vivan ahí y no tapen la zona de juego. Solo cuando
+    // la pantalla es más ancha que 16:9 (celular girado).
+    let availW = vw, availH = vh;
+    if (vw >= vh && vw / vh > W / H + 0.02) {
+      const pad = Math.min(vw * 0.13, 120);   // hasta 13% o 120px por lado
+      availW = Math.max(vw - 2 * pad, vw * 0.6);
+    }
+    // Caja 16:9 que cabe en el area disponible (letterbox).
+    let scale = Math.min(availW / W, availH / H);
     if (!isFinite(scale) || scale <= 0) scale = 1;
     const dispW = W * scale;
     const dispH = H * scale;
@@ -196,6 +204,8 @@
     introTextEl.textContent = "";
     introTextEl.classList.remove("done");
     introBtn.hidden = true;
+    // Coro celestial de fondo mientras se escribe la historia.
+    startIntroChant();
     let i = 0;
     const step = () => {
       if (i >= INTRO_STORY.length) {
@@ -223,6 +233,9 @@
     introBtn.addEventListener("click", () => {
       clearIntroTimers();
       introEl.hidden = true;
+      // Al cerrar el intro, revela el menú principal y silencia el coro.
+      stopIntroChant();
+      if (overlay) overlay.hidden = false;
     });
     // Permite saltar el intro con Enter/Espacio tocando la pantalla.
     const skipIntro = (ev) => {
@@ -236,6 +249,43 @@
     };
     window.addEventListener("keydown", skipIntro);
     introEl.addEventListener("pointerdown", skipIntro);
+  }
+
+  // --- Puerta de clave: el caballero debe pronunciar "angel" ---
+  const gateEl = document.getElementById("gate");
+  const gateInput = document.getElementById("gate-input");
+  const gateError = document.getElementById("gate-error");
+  const gateBtn = document.getElementById("btn-gate");
+  if (gateEl && !gateEl.hidden) {
+    // Foco al cargar para que escriba enseguida.
+    setTimeout(() => { if (gateInput) gateInput.focus(); }, 200);
+  }
+  function tryGate() {
+    if (!gateInput) return;
+    const val = (gateInput.value || "").trim().toLowerCase();
+    if (val === "angel") {
+      if (gateError) gateError.hidden = true;
+      if (gateEl) gateEl.hidden = true;
+      // Desbloquea el audio con este gesto del usuario.
+      ensureAudio();
+      if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+      // Muestra el intro cinematográfico y arranca la máquina de escribir.
+      if (introEl) {
+        introEl.hidden = false;
+        playIntro();
+      } else if (overlay) {
+        overlay.hidden = false;
+      }
+    } else {
+      if (gateError) gateError.hidden = false;
+      if (gateInput) { gateInput.value = ""; gateInput.focus(); }
+    }
+  }
+  if (gateBtn) gateBtn.addEventListener("click", tryGate);
+  if (gateInput) {
+    gateInput.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); tryGate(); }
+    });
   }
 
   const CROSS_COST = 22;
@@ -325,6 +375,113 @@
     },
     boss: () => tone(55, 0.45, "sawtooth", 0.08, 28),
   };
+
+  // --- Coro celestial sintetizado (pad etéreo / canto gregoriano) ---
+  // No hay TTS por IA disponible, asi que se imita una voz coral con
+  // osciladores triangulares, vibrato lento y un filtro pasabajos cálido.
+  let chantBus = null;
+  let chantVoices = [];
+  let prayerChantOn = false;
+  let introChantOn = false;
+
+  // Narración del intro (audio real del usuario).
+  const introVoice = document.getElementById("intro-voice");
+  if (introVoice) { introVoice.volume = 0.9; }
+
+  function ensureChantBus() {
+    if (!audioCtx) return null;
+    if (chantBus) return chantBus;
+    const lp = audioCtx.createBiquadFilter();
+    lp.type = "lowpass"; lp.frequency.value = 1700; lp.Q.value = 0.5;
+    const g = audioCtx.createGain(); g.gain.value = 0;
+    lp.connect(g); g.connect(audioCtx.destination);
+    chantBus = { in: lp, out: g };
+    return chantBus;
+  }
+  function chantVoice(freq, detune, vol, attack) {
+    const bus = ensureChantBus(); if (!bus) return null;
+    const o = audioCtx.createOscillator();
+    o.type = "triangle"; o.frequency.value = freq; o.detune.value = detune || 0;
+    const vg = audioCtx.createGain(); vg.gain.value = 0;
+    // Vibrato lento para darle el "tembleor" de una voz humana.
+    const lfo = audioCtx.createOscillator();
+    lfo.frequency.value = 4.2 + Math.random() * 1.6;
+    const lfoG = audioCtx.createGain(); lfoG.gain.value = 3.8;
+    lfo.connect(lfoG); lfoG.connect(o.detune);
+    o.connect(vg); vg.connect(bus.in);
+    const now = audioCtx.currentTime;
+    vg.gain.setValueAtTime(0, now);
+    vg.gain.linearRampToValueAtTime(vol, now + (attack || 1.2));
+    o.start(); lfo.start();
+    return { o, lfo, vg, vol };
+  }
+  // Acorde menor (la menor) solemne para el intro.
+  const INTRO_CHORD = [110, 220, 329.63, 440, 523.25];
+  // Acorde mayor (do mayor) luminoso para el rezo, como un canto celestial.
+  const PRAYER_CHORD = [261.63, 329.63, 392.0, 523.25, 659.25, 783.99];
+  function startChant(chord, vol, attack) {
+    stopChant();
+    ensureAudio();
+    const bus = ensureChantBus();
+    if (bus && audioCtx) {
+      bus.out.gain.cancelScheduledValues(audioCtx.currentTime);
+      bus.out.gain.setValueAtTime(1, audioCtx.currentTime);
+    }
+    chord.forEach((f, i) => {
+      const v = chantVoice(f, i % 2 ? 7 : -7, vol, attack);
+      if (v) chantVoices.push(v);
+    });
+  }
+  function stopChant() {
+    if (!audioCtx) { chantVoices = []; return; }
+    const now = audioCtx.currentTime;
+    if (chantBus) {
+      chantBus.out.gain.cancelScheduledValues(now);
+      chantBus.out.gain.setValueAtTime(chantBus.out.gain.value, now);
+      chantBus.out.gain.linearRampToValueAtTime(0, now + 0.8);
+    }
+    const vs = chantVoices; chantVoices = [];
+    vs.forEach((v) => {
+      try {
+        v.vg.gain.cancelScheduledValues(now);
+        v.vg.gain.setValueAtTime(v.vg.gain.value, now);
+        v.vg.gain.linearRampToValueAtTime(0, now + 0.8);
+        v.o.stop(now + 0.9); v.lfo.stop(now + 0.9);
+      } catch (e) {}
+    });
+  }
+  function startIntroChant() {
+    if (introChantOn) return;
+    introChantOn = true;
+    // Coro suave de fondo bajo la narración.
+    startChant(INTRO_CHORD, 0.03, 1.6);
+    // Narración con voz real.
+    if (introVoice) {
+      try {
+        introVoice.currentTime = 0;
+        const pr = introVoice.play();
+        if (pr && pr.catch) pr.catch(() => {});
+      } catch (e) {}
+    }
+  }
+  function stopIntroChant() {
+    if (!introChantOn) return;
+    introChantOn = false;
+    stopChant();
+    if (introVoice) {
+      try { introVoice.pause(); introVoice.currentTime = 0; } catch (e) {}
+    }
+  }
+  function startPrayerChant() {
+    if (prayerChantOn) return;
+    prayerChantOn = true;
+    startChant(PRAYER_CHORD, 0.06, 0.7);
+  }
+  function stopPrayerChant() {
+    if (!prayerChantOn) return;
+    prayerChantOn = false;
+    stopChant();
+  }
 
   function makeLevel() {
     const platforms = [
@@ -551,6 +708,8 @@
   }
 
   function resetWorld() {
+    stopPrayerChant();
+    stopIntroChant();
     const level = makeLevel();
     world = {
       level,
@@ -995,8 +1154,11 @@
       p.prayer = PRAYER_TIME;
       // Rezar frena al chico: se arrodilla y no avanza.
       p.vx *= Math.pow(0.02, dt);
-    } else if (p.prayer > 0) {
-      p.prayer -= dt;
+      // Canto celestial (voz en latín) mientras reza.
+      startPrayerChant();
+    } else {
+      if (p.prayer > 0) p.prayer -= dt;
+      stopPrayerChant();
     }
 
     if (p.dashCd > 0) p.dashCd -= dt;
@@ -4451,6 +4613,7 @@
   }
 
   function showDead() {
+    stopPrayerChant();
     state = "dead";
     overlay.hidden = false;
     panelStart.hidden = true;
@@ -4459,6 +4622,7 @@
   }
 
   function showWin() {
+    stopPrayerChant();
     state = "win";
     sfx.win();
     if (winStatsEl && world) {

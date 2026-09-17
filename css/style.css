@@ -426,6 +426,41 @@ h2 { font-size: clamp(24px, 5vw, 36px); }
   transform: translateY(1px);
 }
 
+.gate-panel {
+  width: min(380px, 100%);
+}
+
+/* Fondo negro puro para la puerta de la clave. */
+.gate {
+  background: #000;
+}
+
+.gate-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 14px 0 6px;
+  padding: 12px 14px;
+  background: rgba(7, 6, 13, 0.7);
+  border: 1px solid rgba(232, 200, 114, 0.45);
+  color: var(--gold);
+  font-family: Cinzel, serif;
+  letter-spacing: 0.22em;
+  text-align: center;
+  font-size: 18px;
+  text-transform: lowercase;
+  outline: none;
+}
+.gate-input::placeholder { color: rgba(232, 200, 114, 0.4); letter-spacing: 0.18em; }
+.gate-input:focus { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(232, 200, 114, 0.25); }
+
+.gate-error {
+  margin: 4px 0 10px;
+  color: #d65a4a;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+.gate-error[hidden] { display: none; }
+
 .fine {
   margin: 14px 0 0;
   font-size: 11px;
